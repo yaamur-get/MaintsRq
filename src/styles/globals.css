@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "DGShamael-Regular";
+  src: url("/font/DGShamael-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+[dir="rtl"],
+[dir="rtl"] * {
+  font-family: "DGShamael-Regular", sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    --radius: 0.55rem;
+    
+    /* Charity Identity Colors */
+    --charity-primary: 134 65% 24%;        /* #08704C */
+    --charity-dark: 158 64% 19%;           /* #065B3D */
+    --charity-medium: 151 34% 37%;         /* #3F7F65 */
+    --charity-light: 111 29% 55%;          /* #7BAE6D */
+    --charity-bg-light: 54 29% 96%;        /* #F7F6F2 */
+    --charity-bg-calm: 146 28% 85%;        /* #CFE3D8 */
+    
+    /* Theme Colors using Charity Identity */
+    --background: 54 29% 96%;              /* #F7F6F2 */
+    --foreground: 0 0% 10%;                /* Dark gray text */
+    --card: 0 0% 100%;                     /* White cards */
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 134 65% 24%;                /* #08704C - Main green */
+    --primary-foreground: 0 0% 100%;       /* White text on green */
+    --secondary: 146 28% 85%;              /* #CFE3D8 - Calm bg */
+    --secondary-foreground: 0 0% 10%;
+    --muted: 146 28% 85%;                  /* #CFE3D8 */
+    --muted-foreground: 0 0% 40%;
+    --accent: 111 29% 55%;                 /* #7BAE6D - Light green */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;              /* Red for errors */
+    --destructive-foreground: 0 0% 100%;
+    --border: 146 28% 85%;                 /* #CFE3D8 */
+    --input: 146 28% 85%;
+    --ring: 134 65% 24%;                   /* #08704C */
+    --chart-1: 134 65% 24%;                /* #08704C */
+    --chart-2: 111 29% 55%;                /* #7BAE6D */
+    --chart-3: 151 34% 37%;                /* #3F7F65 */
+    --chart-4: 158 64% 19%;                /* #065B3D */
+    --chart-5: 146 28% 85%;                /* #CFE3D8 */
+    --sidebar: 54 29% 96%;                 /* #F7F6F2 */
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 134 65% 24%;        /* #08704C */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 146 28% 85%;         /* #CFE3D8 */
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 146 28% 85%;
+    --sidebar-ring: 134 65% 24%;
+  }
+
+  .dark {
+    --radius: 0.55rem;
+    
+    /* Charity Identity Colors - Darker versions */
+    --charity-primary: 134 65% 24%;        /* #08704C */
+    --charity-dark: 158 64% 19%;           /* #065B3D */
+    --charity-medium: 151 34% 37%;         /* #3F7F65 */
+    --charity-light: 111 29% 55%;          /* #7BAE6D */
+    --charity-bg-light: 54 29% 96%;        /* #F7F6F2 */
+    --charity-bg-calm: 146 28% 85%;        /* #CFE3D8 */
+    
+    /* Dark mode using greens */
+    --background: 158 64% 8%;              /* Very dark green */
+    --foreground: 54 29% 96%;              /* Light text */
+    --card: 158 64% 12%;                   /* Dark green card */
+    --card-foreground: 54 29% 96%;
+    --popover: 158 64% 10%;
+    --popover-foreground: 54 29% 96%;
+    --primary: 111 29% 55%;                /* #7BAE6D - Light green for dark mode */
+    --primary-foreground: 0 0% 10%;
+    --secondary: 158 64% 15%;
+    --secondary-foreground: 54 29% 96%;
+    --muted: 158 64% 15%;
+    --muted-foreground: 146 28% 70%;
+    --accent: 134 65% 30%;                 /* Slightly lighter #08704C */
+    --accent-foreground: 54 29% 96%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 158 64% 20%;
+    --input: 158 64% 20%;
+    --ring: 111 29% 55%;
+    --chart-1: 111 29% 55%;
+    --chart-2: 134 65% 24%;
+    --chart-3: 151 34% 37%;
+    --chart-4: 158 64% 19%;
+    --chart-5: 146 28% 85%;
+    --sidebar: 158 64% 10%;
+    --sidebar-foreground: 54 29% 96%;
+    --sidebar-primary: 111 29% 55%;
+    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-accent: 158 64% 15%;
+    --sidebar-accent-foreground: 54 29% 96%;
+    --sidebar-border: 158 64% 20%;
+    --sidebar-ring: 111 29% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .container {
+    @apply mx-auto px-4 md:px-6 lg:px-8 max-w-7xl w-full;
+  }
+  
+  /* Charity-specific button styles */
+  .btn-charity-primary {
+    @apply bg-[#08704C] hover:bg-[#065B3D] text-white;
+  }
+  
+  .btn-charity-secondary {
+    @apply bg-[#CFE3D8] hover:bg-[#7BAE6D] text-[#065B3D];
+  }
+  
+  /* Success states */
+  .success-state {
+    @apply bg-[#7BAE6D] text-white;
+  }
+}
