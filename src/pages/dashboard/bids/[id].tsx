@@ -11,16 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Save, ArrowLeft, CheckCircle2, Upload, FileText } from "lucide-react";
 import { requestService } from "@/services/requestService";
-import { inspectionService } from "@/services/inspectionService";
 import { pricingService } from "@/services/pricingService";
 import { supabase } from "@/integrations/supabase/client";
 import Link from "next/link";
 
 type BidItem = {
   itemId: string;
+  inspectionItemId?: string;
   mainItem: string;
   subItem: string;
   estimatedPrice: string;
+  quantity: number;
   contractorId: string;
   bidAmount: string;
   bidDocument: File | null;
@@ -55,11 +56,14 @@ export default function BidsPage() {
       const requestData = await requestService.getRequestById(id as string);
       setRequest(requestData);
 
-      // جلب بنود المعاينة
-      const inspectionItems = await inspectionService.getInspectionItems(id as string);
-      
       // جلب التسعيرات (لعرض السعر التقديري)
       const pricing = await pricingService.getExpertPricing(id as string);
+
+      if (!pricing.length) {
+        setItems([]);
+        setError("لا توجد تسعيرات محفوظة لهذا الطلب حتى الآن");
+        return;
+      }
       
       // جلب العروض الموجودة
       const existingBids = await pricingService.getContractorBids(id as string);
@@ -69,15 +73,22 @@ export default function BidsPage() {
       setContractors(contractorsList);
 
       // تحويل البنود إلى صيغة مناسبة للعروض
-      const bidItems = inspectionItems.map((item: any) => {
-        const itemPricing = pricing.find((p: any) => p.inspection_item_id === item.id);
-        const existing = existingBids.find((b: any) => b.inspection_item_id === item.id);
+      const bidItems = pricing.map((itemPricing: any) => {
+        const existing = existingBids.find((b: any) => {
+          if (itemPricing.external_report_item_id) {
+            return b.external_report_item_id === itemPricing.external_report_item_id;
+          }
+
+          return b.inspection_item_id === itemPricing.inspection_item_id;
+        });
         
         return {
-          itemId: item.id,
-          mainItem: item.main_item,
-          subItem: item.sub_item,
+          itemId: itemPricing.external_report_item_id || itemPricing.inspection_item_id,
+          inspectionItemId: itemPricing.inspection_item_id || undefined,
+          mainItem: itemPricing.item_main_name || "بند تسعير",
+          subItem: itemPricing.item_sub_name || "-",
           estimatedPrice: itemPricing?.estimated_price?.toString() || "0",
+          quantity: Number(itemPricing?.quantity || 1),
           contractorId: existing?.contractor_id || "",
           bidAmount: existing?.bid_amount?.toString() || "",
           bidDocument: null,
@@ -131,7 +142,12 @@ export default function BidsPage() {
         } else {
           // إضافة عرض جديد
           const newBid = await pricingService.addContractorBid({
-            inspection_item_id: item.itemId,
+            request_id: id as string,
+            inspection_item_id: item.inspectionItemId || null,
+            external_report_item_id: item.inspectionItemId ? null : item.itemId,
+            item_main_name: item.mainItem,
+            item_sub_name: item.subItem,
+            quantity: item.quantity,
             contractor_id: item.contractorId,
             bid_amount: parseFloat(item.bidAmount),
             notes: item.notes,
@@ -239,6 +255,8 @@ export default function BidsPage() {
                   </CardTitle>
                   <p className="text-sm text-slate-600">
                     التسعير التقديري: {parseFloat(item.estimatedPrice).toLocaleString('ar-SA')} ريال
+                    {" · "}
+                    الكمية: {item.quantity}
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-4">

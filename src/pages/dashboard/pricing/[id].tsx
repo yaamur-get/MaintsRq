@@ -10,16 +10,19 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Save, ArrowLeft, CheckCircle2, DollarSign } from "lucide-react";
 import { requestService } from "@/services/requestService";
-import { inspectionService } from "@/services/inspectionService";
 import { pricingService } from "@/services/pricingService";
+import { fetchInspectionReport, flattenInspectionReportItems } from "@/services/inspectionReportService";
 import Link from "next/link";
 
 type PricingItem = {
   itemId: string;
+  issueId: string;
   mainItem: string;
   subItem: string;
   specifications: string;
-  estimatedPrice: string;
+  quantity: number;
+  unit: string;
+  unitPrice: string;
   notes: string;
 };
 
@@ -48,21 +51,35 @@ export default function PricingPage() {
       const requestData = await requestService.getRequestById(id as string);
       setRequest(requestData);
 
-      // جلب بنود المعاينة المعتمدة
-      const inspectionItems = await inspectionService.getInspectionItems(id as string);
+      if (!requestData?.rq_number) {
+        setItems([]);
+        setError("لا يوجد rq_number مرتبط بهذا الطلب");
+        return;
+      }
+
+      const externalReport = await fetchInspectionReport(requestData.rq_number);
+      if (!externalReport) {
+        setItems([]);
+        setError("لا يوجد تقرير معاينة خارجي متاح لهذا الطلب حالياً");
+        return;
+      }
       
       // جلب التسعيرات الموجودة
       const existingPricing = await pricingService.getExpertPricing(id as string);
+      const reportItems = flattenInspectionReportItems(externalReport);
       
       // تحويل البنود إلى صيغة مناسبة للتسعير
-      const pricingItems = inspectionItems.map((item: any) => {
-        const existing = existingPricing.find((p: any) => p.inspection_item_id === item.id);
+      const pricingItems = reportItems.map((item) => {
+        const existing = existingPricing.find((p: any) => p.external_report_item_id === item.externalItemId);
         return {
-          itemId: item.id,
-          mainItem: item.main_item,
-          subItem: item.sub_item,
-          specifications: item.specifications || "",
-          estimatedPrice: existing?.estimated_price?.toString() || "",
+          itemId: item.externalItemId,
+          issueId: item.externalIssueId,
+          mainItem: item.mainItemName,
+          subItem: item.subItemName,
+          specifications: item.specifications || item.causeName || item.issueNotes || "",
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: existing?.unit_price?.toString() || "",
           notes: existing?.pricing_notes || ""
         };
       });
@@ -84,9 +101,14 @@ export default function PricingPage() {
 
   const calculateTotal = () => {
     return items.reduce((sum, item) => {
-      const price = parseFloat(item.estimatedPrice) || 0;
-      return sum + price;
+      const unitPrice = parseFloat(item.unitPrice) || 0;
+      return sum + (unitPrice * item.quantity);
     }, 0);
+  };
+
+  const calculateItemTotal = (item: PricingItem) => {
+    const unitPrice = parseFloat(item.unitPrice) || 0;
+    return unitPrice * item.quantity;
   };
 
   const handleSubmit = async () => {
@@ -95,16 +117,25 @@ export default function PricingPage() {
       setError("");
 
       // التحقق من أن جميع البنود لها أسعار
-      if (items.some(item => !item.estimatedPrice || parseFloat(item.estimatedPrice) <= 0)) {
+      if (items.some(item => !item.unitPrice || parseFloat(item.unitPrice) <= 0)) {
         setError("يرجى تعبئة جميع الأسعار");
         return;
       }
 
       // حفظ التسعيرات
       for (const item of items) {
+        const unitPrice = parseFloat(item.unitPrice);
         await pricingService.upsertExpertPricing({
-          inspection_item_id: item.itemId,
-          estimated_price: parseFloat(item.estimatedPrice),
+          request_id: id as string,
+          external_report_item_id: item.itemId,
+          external_report_issue_id: item.issueId,
+          item_main_name: item.mainItem,
+          item_sub_name: item.subItem,
+          item_specifications: item.specifications,
+          item_unit: item.unit,
+          quantity: item.quantity,
+          unit_price: unitPrice,
+          estimated_price: unitPrice * item.quantity,
           pricing_notes: item.notes,
           approved: false // Default to unapproved
         });
@@ -193,6 +224,9 @@ export default function PricingPage() {
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center justify-between">
                     <span>بند {index + 1}: {item.mainItem} - {item.subItem}</span>
+                    <span className="text-sm font-medium text-slate-500">
+                      الكمية: {item.quantity} {item.unit || ""}
+                    </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -202,9 +236,9 @@ export default function PricingPage() {
                     </div>
                   )}
 
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid md:grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor={`price-${index}`}>السعر التقديري (ريال) *</Label>
+                      <Label htmlFor={`price-${index}`}>سعر الوحدة (ريال) *</Label>
                       <div className="relative">
                         <DollarSign className="absolute right-3 top-3 w-4 h-4 text-slate-400" />
                         <Input
@@ -212,11 +246,18 @@ export default function PricingPage() {
                           type="number"
                           step="0.01"
                           min="0"
-                          value={item.estimatedPrice}
-                          onChange={(e) => updateItem(index, "estimatedPrice", e.target.value)}
+                          value={item.unitPrice}
+                          onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
                           placeholder="0.00"
                           className="pr-10"
                         />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>الإجمالي</Label>
+                      <div className="h-10 px-3 rounded-md border bg-slate-50 flex items-center font-semibold text-charity-primary">
+                        {calculateItemTotal(item).toLocaleString("ar-SA")} ريال
                       </div>
                     </div>
 

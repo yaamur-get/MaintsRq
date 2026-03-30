@@ -32,10 +32,11 @@ import {
   Copy,
   Save,
   Pencil,
-  X
+  X,
+  RefreshCw,
+  Send
 } from "lucide-react";
 import { getRequesterRoleLabel, REQUESTER_ROLE_LABELS, requestService, type RequesterRole } from "@/services/requestService";
-import { inspectionService } from "@/services/inspectionService";
 import { pricingService } from "@/services/pricingService";
 import { authService } from "@/services/authService";
 import { commonDataService, type City, type District, type RequestType } from "@/services/commonDataService";
@@ -44,6 +45,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { fetchInspectionReport, flattenInspectionReportItems, getReportStatusLabel, type ExternalInspectionResponse } from "@/services/inspectionReportService";
 
 type Request = any;
 type RequestStatus = Database["public"]["Enums"]["request_status"];
@@ -181,10 +183,11 @@ export default function RequestDetails() {
   const [loading, setLoading] = useState(true);
   const [statusTranslations, setStatusTranslations] = useState<Record<string, { label: string; color: string }>>({});
   const [timeline, setTimeline] = useState<any[]>([]);
-  const [inspectionItems, setInspectionItems] = useState<any[]>([]);
   const [expertPricing, setExpertPricing] = useState<any[]>([]);
   const [contractorBids, setContractorBids] = useState<any[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [externalReport, setExternalReport] = useState<ExternalInspectionResponse | null>(null);
+  const [loadingExternalReport, setLoadingExternalReport] = useState(false);
   
   // Team Assignment States
   const [selectedTechnician, setSelectedTechnician] = useState("");
@@ -299,6 +302,24 @@ export default function RequestDetails() {
     }
   };
 
+  const reloadExternalInspectionReport = async (rqNumber?: string) => {
+    if (!rqNumber) {
+      setExternalReport(null);
+      return;
+    }
+
+    try {
+      setLoadingExternalReport(true);
+      const report = await fetchInspectionReport(rqNumber);
+      setExternalReport(report);
+    } catch (err) {
+      console.error("Error loading external inspection report:", err);
+      setExternalReport(null);
+    } finally {
+      setLoadingExternalReport(false);
+    }
+  };
+
   const loadRequest = async (id: string) => {
     try {
       setLoading(true);
@@ -311,6 +332,13 @@ export default function RequestDetails() {
 
       setRequest(requestData);
 
+      // Fetch external inspection report from Inspection App
+      if (requestData.rq_number) {
+        await reloadExternalInspectionReport(requestData.rq_number);
+      } else {
+        setExternalReport(null);
+      }
+
       // Pre-fill selection if already assigned
       if (requestData?.assigned_technician_id) setSelectedTechnician(requestData.assigned_technician_id);
 
@@ -321,24 +349,6 @@ export default function RequestDetails() {
           console.error("Error loading timeline (non-critical):", err);
           setTimeline([]);
         });
-
-      // Load additional data based on status
-      if (requestData.current_status && [
-        "pending_inspection_approval",
-        "pending_expert_pricing",
-        "pending_pricing_approval",
-        "pending_beneficiary_approval",
-        "pending_funding",
-        "pending_contractor_bids",
-        "pending_final_approval",
-        "in_progress",
-        "pending_final_report",
-        "pending_closure",
-        "closed"
-      ].includes(requestData.current_status)) {
-        const items = await inspectionService.getInspectionItems(id);
-        setInspectionItems(items);
-      }
 
       if (requestData.current_status && [
         "pending_pricing_approval",
@@ -564,6 +574,7 @@ export default function RequestDetails() {
   const totalContractorPrice = contractorBids
     .filter(bid => bid.is_selected)
     .reduce((sum, bid) => sum + (bid.bid_amount || 0), 0);
+  const externalInspectionItems = flattenInspectionReportItems(externalReport);
   const canEditRequestData = userRole === "customer_service" && request.current_status === "pending_review";
   const filteredMosques = editForm.district_id
     ? mosques.filter((mosque) => mosque.district_id === editForm.district_id)
@@ -1132,55 +1143,237 @@ export default function RequestDetails() {
                   </Card>
                 </TabsContent>
 
-                {/* Inspection Tab */}
+                {/* Inspection Tab - External Report */}
                 <TabsContent value="inspection">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>بنود المعاينة</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {inspectionItems.length === 0 ? (
-                        <p className="text-center text-slate-500 py-8">
-                          لم يتم إضافة بنود معاينة بعد
-                        </p>
-                      ) : (
-                        <div className="space-y-6">
-                          {inspectionItems.map((item) => (
-                            <div key={item.id} className="border rounded-lg p-4">
-                              <div className="flex items-start justify-between mb-3">
-                                <div>
-                                  <h4 className="font-medium text-slate-900">{item.main_item}</h4>
-                                  <p className="text-sm text-slate-600">{item.sub_item}</p>
-                                </div>
-                                <Badge variant="outline" className="text-xs">
-                                  بند {item.item_number}
-                                </Badge>
+                  {loadingExternalReport ? (
+                    <Card>
+                      <CardContent className="py-12 text-center">
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-charity-primary" />
+                        <p className="text-slate-500">جاري جلب تقرير المعاينة...</p>
+                      </CardContent>
+                    </Card>
+                  ) : externalReport ? (
+                    <div className="space-y-4">
+                      {/* Report Header Card */}
+                      <Card>
+                        <CardHeader className="bg-gradient-to-l from-charity-bg-calm to-white border-b">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="bg-white p-3 rounded-xl border">
+                                <FileText className="w-6 h-6 text-charity-primary" />
                               </div>
-                              
-                              {item.specifications && (
-                                <p className="text-sm text-slate-700 mb-3">{item.specifications}</p>
-                              )}
+                              <div>
+                                <CardTitle>تقرير المعاينة</CardTitle>
+                                <p className="text-sm text-slate-500 mt-0.5">
+                                  {new Date(externalReport.report.report_date).toLocaleDateString("ar-SA", {
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => reloadExternalInspectionReport(request.rq_number)}
+                                disabled={loadingExternalReport}
+                              >
+                                <RefreshCw className={`w-4 h-4 ml-2 ${loadingExternalReport ? "animate-spin" : ""}`} />
+                                تحديث تقرير المعاينة
+                              </Button>
+                              <Badge className="bg-charity-bg-calm text-charity-dark border-charity-medium">
+                                {getReportStatusLabel(externalReport.report.status)}
+                              </Badge>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-4 space-y-4">
+                          <div className="grid md:grid-cols-3 gap-3">
+                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                              <Building2 className="w-5 h-5 text-charity-primary shrink-0" />
+                              <div>
+                                <p className="text-xs text-slate-500">المسجد</p>
+                                <p className="font-medium text-slate-900">{externalReport.report.mosques.name}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                              <MapPin className="w-5 h-5 text-charity-primary shrink-0" />
+                              <div>
+                                <p className="text-xs text-slate-500">المنطقة</p>
+                                <p className="font-medium text-slate-900">
+                                  {externalReport.report.mosques.district} - {externalReport.report.mosques.city}
+                                </p>
+                              </div>
+                            </div>
+                            {externalReport.report.mosques.location_link && (
+                              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                                <LinkIcon className="w-5 h-5 text-charity-primary shrink-0" />
+                                <div>
+                                  <p className="text-xs text-slate-500">الموقع</p>
+                                  <a
+                                    href={externalReport.report.mosques.location_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium text-charity-primary underline text-sm"
+                                  >
+                                    فتح على الخريطة
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+                          </div>
 
-                              {/* Photos */}
-                              {item.images && item.images.length > 0 && (
-                                <div className="grid grid-cols-3 gap-2 mt-3">
-                                  {item.images.map((img: any) => (
-                                    <div key={img.id} className="aspect-square rounded-lg overflow-hidden border">
-                                      <img 
-                                        src={img.image_url} 
-                                        alt={`صورة ${item.item_number}`}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    </div>
-                                  ))}
+                          {/* Mosque Photos */}
+                          {(externalReport.report.mosques.main_photo_url || externalReport.report.map_photo_url) && (
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {externalReport.report.mosques.main_photo_url && (
+                                <div>
+                                  <p className="text-xs text-slate-500 mb-2">صورة المسجد</p>
+                                  <div className="aspect-video rounded-lg overflow-hidden border">
+                                    <img
+                                      src={externalReport.report.mosques.main_photo_url}
+                                      alt="صورة المسجد"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                              {externalReport.report.map_photo_url && (
+                                <div>
+                                  <p className="text-xs text-slate-500 mb-2">موقع المسجد على الخريطة</p>
+                                  <div className="aspect-video rounded-lg overflow-hidden border">
+                                    <img
+                                      src={externalReport.report.map_photo_url}
+                                      alt="موقع المسجد"
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
                                 </div>
                               )}
                             </div>
-                          ))}
-                        </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Issues */}
+                      {externalReport.issues.length === 0 ? (
+                        <Card>
+                          <CardContent className="py-8 text-center">
+                            <p className="text-slate-500">لا توجد مشاكل مسجلة في التقرير</p>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        externalReport.issues.map((issue, issueIndex) => (
+                          <Card key={issue.id}>
+                            <CardHeader className="border-b pb-3">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-base">
+                                  {issueIndex + 1}. {issue.main_item.name_ar}
+                                </CardTitle>
+                                <Badge variant="outline" className="text-xs">
+                                  {issue.items.length} بند
+                                </Badge>
+                              </div>
+                              {issue.notes && (
+                                <p className="text-sm text-slate-600 mt-1">
+                                  <span className="font-medium">ملاحظات:</span> {issue.notes}
+                                </p>
+                              )}
+                            </CardHeader>
+                            <CardContent className="pt-4 space-y-4">
+                              {/* Items Table */}
+                              {issue.items.length > 0 && (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-50">
+                                        <th className="text-right p-2 border border-slate-200 font-medium">البند</th>
+                                        <th className="text-right p-2 border border-slate-200 font-medium">السبب</th>
+                                        <th className="text-right p-2 border border-slate-200 font-medium">المواصفات</th>
+                                        <th className="text-center p-2 border border-slate-200 font-medium">الكمية</th>
+                                        <th className="text-center p-2 border border-slate-200 font-medium">الوحدة</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {issue.items.map((item) => (
+                                        <tr key={item.id} className="hover:bg-slate-50">
+                                          <td className="p-2 border border-slate-200">
+                                            {item.sub_items?.name_ar ?? item.sub_item?.name_ar ?? "-"}
+                                          </td>
+                                          <td className="p-2 border border-slate-200 text-slate-600">
+                                            {item.causes?.name_ar ?? item.cause?.name_ar ?? "-"}
+                                          </td>
+                                          <td className="p-2 border border-slate-200 text-slate-600 max-w-xs">
+                                            {item.specs?.name ?? item.spec?.name ?? "-"}
+                                          </td>
+                                          <td className="p-2 border border-slate-200 text-center font-medium">
+                                            {item.quantity}
+                                          </td>
+                                          <td className="p-2 border border-slate-200 text-center">
+                                            {item.sub_items?.unit_ar ?? item.sub_item?.unit_ar ?? "-"}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+
+                              {/* Issue Photos */}
+                              {issue.photos.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-slate-500 mb-2">
+                                    الصور ({issue.photos.length})
+                                  </p>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {issue.photos
+                                      .slice()
+                                      .sort((a, b) => a.photo_order - b.photo_order)
+                                      .map((photo) => (
+                                        <a
+                                          key={photo.id}
+                                          href={photo.photo_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="aspect-square rounded-lg overflow-hidden border hover:opacity-90 transition-opacity block"
+                                        >
+                                          <img
+                                            src={photo.photo_url}
+                                            alt={`صورة ${issueIndex + 1}`}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </a>
+                                      ))}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        ))
                       )}
-                    </CardContent>
-                  </Card>
+                    </div>
+                  ) : (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>تقرير المعاينة</CardTitle>
+                      </CardHeader>
+                      <CardContent className="py-8 text-center space-y-2">
+                        {request.rq_number ? (
+                          <>
+                            <AlertCircle className="w-8 h-8 mx-auto text-amber-500" />
+                            <p className="text-slate-600">
+                              لم يتم رفع تقرير معاينة من تطبيق المعاينة بعد
+                            </p>
+                            <p className="text-sm text-slate-400">رقم الطلب: {request.rq_number}</p>
+                          </>
+                        ) : (
+                          <p className="text-slate-500">لا يوجد رقم طلب مرتبط</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
                 </TabsContent>
 
                 {/* Pricing Tab */}
@@ -1209,8 +1402,12 @@ export default function RequestDetails() {
                           {expertPricing.map((pricing) => (
                             <div key={pricing.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                               <div>
-                                <p className="font-medium text-slate-900">{pricing.item?.main_item}</p>
-                                <p className="text-sm text-slate-600">{pricing.item?.sub_item}</p>
+                                <p className="font-medium text-slate-900">{pricing.item_main_name || "بند تسعير"}</p>
+                                <p className="text-sm text-slate-600">{pricing.item_sub_name || "-"}</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  الكمية: {Number(pricing.quantity || 1)} {pricing.item_unit || ""}
+                                  {pricing.unit_price ? ` · سعر الوحدة: ${Number(pricing.unit_price).toLocaleString("ar-SA")} ريال` : ""}
+                                </p>
                               </div>
                               <div className="text-left">
                                 <p className="text-lg font-bold text-charity-primary">
@@ -1234,7 +1431,7 @@ export default function RequestDetails() {
                     <CardContent>
                       <div className="space-y-4">
                         {/* Inspection Report */}
-                        {inspectionItems.length > 0 && (
+                        {externalReport && (
                           <div className="border rounded-lg p-4">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
@@ -1242,20 +1439,20 @@ export default function RequestDetails() {
                                   <FileText className="w-5 h-5 text-blue-600" />
                                 </div>
                                 <div>
-                                  <p className="font-medium text-slate-900">تقرير المعاينة</p>
-                                  <p className="text-sm text-slate-600">{inspectionItems.length} بند</p>
+                                  <p className="font-medium text-slate-900">تقرير المعاينة الخارجي</p>
+                                  <p className="text-sm text-slate-600">{externalInspectionItems.length} بند</p>
                                 </div>
                               </div>
-                              <Button variant="outline" size="sm">
+                              <Button variant="outline" size="sm" onClick={() => reloadExternalInspectionReport(request.rq_number)}>
                                 <Download className="w-4 h-4 ml-2" />
-                                تحميل
+                                تحديث
                               </Button>
                             </div>
                           </div>
                         )}
 
                         {/* Contractor Bids */}
-                        {contractorBids.filter(bid => bid.document_url).map((bid) => (
+                        {contractorBids.filter(bid => bid.bid_document_url).map((bid) => (
                           <div key={bid.id} className="border rounded-lg p-4">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3">
@@ -1264,10 +1461,10 @@ export default function RequestDetails() {
                                 </div>
                                 <div>
                                   <p className="font-medium text-slate-900">عرض سعر - {bid.contractor?.name}</p>
-                                  <p className="text-sm text-slate-600">{bid.item?.main_item}</p>
+                                  <p className="text-sm text-slate-600">{bid.item_main_name || bid.item_sub_name || "بند عرض"}</p>
                                 </div>
                               </div>
-                              <a href={bid.document_url} target="_blank" rel="noopener noreferrer">
+                              <a href={bid.bid_document_url} target="_blank" rel="noopener noreferrer">
                                 <Button variant="outline" size="sm">
                                   <Download className="w-4 h-4 ml-2" />
                                   تحميل
@@ -1277,7 +1474,7 @@ export default function RequestDetails() {
                           </div>
                         ))}
 
-                        {inspectionItems.length === 0 && contractorBids.filter(bid => bid.document_url).length === 0 && (
+                        {!externalReport && contractorBids.filter(bid => bid.bid_document_url).length === 0 && (
                           <p className="text-center text-slate-500 py-8">لا توجد ملفات مرفقة</p>
                         )}
                       </div>
@@ -1406,10 +1603,11 @@ export default function RequestDetails() {
                   {userRole === "project_manager" && request.current_status === "pending_inspection_approval" && (
                     <Button 
                       className="w-full bg-charity-primary hover:bg-charity-dark"
+                      disabled={!externalReport}
                       onClick={() => handleStatusUpdate("pending_expert_pricing", "تم اعتماد المعاينة وتحويل للتسعير")}
                     >
                       <CheckCircle2 className="w-4 h-4 ml-2" />
-                      اعتماد المعاينة وتحويل للتسعير
+                      {externalReport ? "اعتماد المعاينة وتحويل للتسعير" : "بانتظار تقرير المعاينة الخارجي"}
                     </Button>
                   )}
 
@@ -1425,17 +1623,38 @@ export default function RequestDetails() {
 
                   {/* Technician Actions */}
                   {userRole === "technician" && request.current_status === "pending_inspection" && (
-                    <Link href={`/dashboard/requests/inspection/${id}`} className="w-full">
-                      <Button className="w-full bg-charity-primary hover:bg-charity-dark">
-                        <FileText className="w-4 h-4 ml-2" />
-                        بدء المعاينة
-                      </Button>
-                    </Link>
+                    <div className="space-y-3">
+                      <div className="p-4 bg-slate-50 rounded-lg text-center">
+                        <FileText className="w-6 h-6 mx-auto mb-2 text-slate-400" />
+                        <p className="text-sm text-slate-600">رفع تقرير المعاينة يتم من تطبيق المعاينة الخارجي</p>
+                        <p className="text-xs text-slate-500 mt-1">سيظهر التقرير هنا تلقائيًا بعد رفعه وربطه بـ rq_number</p>
+                      </div>
+
+                      {loadingExternalReport ? (
+                        <Button className="w-full" variant="outline" disabled>
+                          <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                          جاري التحقق من تقرير المعاينة...
+                        </Button>
+                      ) : externalReport ? (
+                        <Button
+                          className="w-full bg-charity-primary hover:bg-charity-dark"
+                          onClick={() => handleStatusUpdate("pending_inspection_approval", "تم استلام تقرير المعاينة الخارجي وإرساله لمدير المشاريع")}
+                        >
+                          <Send className="w-4 h-4 ml-2" />
+                          إرسال لمدير المشاريع
+                        </Button>
+                      ) : (
+                        <Button className="w-full" variant="outline" disabled>
+                          <AlertCircle className="w-4 h-4 ml-2" />
+                          بانتظار رفع تقرير المعاينة الخارجي
+                        </Button>
+                      )}
+                    </div>
                   )}
 
                   {/* Pricing Expert Actions */}
                   {userRole === "pricing_expert" && request.current_status === "pending_expert_pricing" && (
-                    <Link href={`/dashboard/requests/pricing/${id}`} className="w-full">
+                    <Link href={`/dashboard/pricing/${id}`} className="w-full">
                       <Button className="w-full bg-charity-primary hover:bg-charity-dark">
                         <DollarSign className="w-4 h-4 ml-2" />
                         رفع التسعيرات
@@ -1445,7 +1664,7 @@ export default function RequestDetails() {
 
                   {/* Technician - Upload Contractor Bids */}
                   {userRole === "technician" && request.current_status === "pending_contractor_bids" && (
-                    <Link href={`/dashboard/requests/bids/${id}`} className="w-full">
+                    <Link href={`/dashboard/bids/${id}`} className="w-full">
                       <Button className="w-full bg-charity-primary hover:bg-charity-dark">
                         <FileText className="w-4 h-4 ml-2" />
                         رفع عروض المقاولين

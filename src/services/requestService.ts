@@ -478,8 +478,8 @@ export const requestService = {
         request_type:request_types(name),
         requester:profiles!requests_beneficiary_id_fkey(full_name, phone)
       `)
-      .eq("assigned_pricing_expert_id", expertId)
       .in("current_status", ["pending_expert_pricing"])
+      .or(`assigned_pricing_expert_id.eq.${expertId},assigned_pricing_expert_id.is.null`)
       .order("created_at", { ascending: false });
 
     if (error) {

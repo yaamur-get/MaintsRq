@@ -89,10 +89,15 @@ export type Database = {
           bid_document_url: string | null
           contractor_id: string
           created_at: string | null
+          external_report_item_id: string | null
           id: string
-          inspection_item_id: string
+          inspection_item_id: string | null
+          item_main_name: string | null
+          item_sub_name: string | null
           is_selected: boolean | null
           notes: string | null
+          quantity: number | null
+          request_id: string
           updated_at: string | null
         }
         Insert: {
@@ -100,10 +105,15 @@ export type Database = {
           bid_document_url?: string | null
           contractor_id: string
           created_at?: string | null
+          external_report_item_id?: string | null
           id?: string
-          inspection_item_id: string
+          inspection_item_id?: string | null
+          item_main_name?: string | null
+          item_sub_name?: string | null
           is_selected?: boolean | null
           notes?: string | null
+          quantity?: number | null
+          request_id: string
           updated_at?: string | null
         }
         Update: {
@@ -111,10 +121,15 @@ export type Database = {
           bid_document_url?: string | null
           contractor_id?: string
           created_at?: string | null
+          external_report_item_id?: string | null
           id?: string
-          inspection_item_id?: string
+          inspection_item_id?: string | null
+          item_main_name?: string | null
+          item_sub_name?: string | null
           is_selected?: boolean | null
           notes?: string | null
+          quantity?: number | null
+          request_id?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -247,9 +262,18 @@ export type Database = {
           approved_by: string | null
           created_at: string | null
           estimated_price: number
+          external_report_issue_id: string | null
+          external_report_item_id: string | null
           id: string
-          inspection_item_id: string
+          inspection_item_id: string | null
+          item_main_name: string | null
+          item_specifications: string | null
+          item_sub_name: string | null
+          item_unit: string | null
           pricing_notes: string | null
+          quantity: number | null
+          request_id: string
+          unit_price: number | null
           updated_at: string | null
         }
         Insert: {
@@ -258,9 +282,18 @@ export type Database = {
           approved_by?: string | null
           created_at?: string | null
           estimated_price: number
+          external_report_issue_id?: string | null
+          external_report_item_id?: string | null
           id?: string
-          inspection_item_id: string
+          inspection_item_id?: string | null
+          item_main_name?: string | null
+          item_specifications?: string | null
+          item_sub_name?: string | null
+          item_unit?: string | null
           pricing_notes?: string | null
+          quantity?: number | null
+          request_id: string
+          unit_price?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -269,9 +302,18 @@ export type Database = {
           approved_by?: string | null
           created_at?: string | null
           estimated_price?: number
+          external_report_issue_id?: string | null
+          external_report_item_id?: string | null
           id?: string
-          inspection_item_id?: string
+          inspection_item_id?: string | null
+          item_main_name?: string | null
+          item_specifications?: string | null
+          item_sub_name?: string | null
+          item_unit?: string | null
           pricing_notes?: string | null
+          quantity?: number | null
+          request_id?: string
+          unit_price?: number | null
           updated_at?: string | null
         }
         Relationships: [
@@ -287,6 +329,13 @@ export type Database = {
             columns: ["inspection_item_id"]
             isOneToOne: true
             referencedRelation: "inspection_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expert_pricing_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "requests"
             referencedColumns: ["id"]
           },
         ]
