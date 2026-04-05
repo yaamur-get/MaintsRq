@@ -65,6 +65,7 @@ export interface FlattenedInspectionReportItem {
   unit: string;
   causeName: string;
   issueNotes: string;
+  photos: InspectionIssuePhoto[];
 }
 
 export async function fetchInspectionReport(
@@ -115,6 +116,7 @@ export function flattenInspectionReportItems(
       unit: item.sub_items?.unit_ar ?? item.sub_item?.unit_ar ?? "",
       causeName: item.causes?.name_ar ?? item.cause?.name_ar ?? "",
       issueNotes: issue.notes ?? "",
+      photos: issue.photos ?? [],
     }))
   );
 }

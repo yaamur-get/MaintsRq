@@ -24,6 +24,17 @@ const isRequesterRole = (value: string): value is RequesterRole => {
   return value === "imam" || value === "muezzin" || value === "mosque_congregation";
 };
 
+const PROJECT_MANAGER_ACTIONABLE_STATUSES: Database["public"]["Enums"]["request_status"][] = [
+  "accepted_initial",
+  "pending_inspection_approval",
+  "pending_pricing_approval",
+  "beneficiary_approved_pricing",
+  "pending_funding",
+  "pending_contractor_selection",
+  "pending_final_approval",
+  "pending_closure",
+];
+
 export const getRequesterRoleLabel = (role?: string | null): string => {
   if (!role || !isRequesterRole(role)) return "غير محدد";
   return REQUESTER_ROLE_LABELS[role];
@@ -104,44 +115,89 @@ export const requestService = {
       mosqueId = anyMosque.id;
     }
 
-    // 3. Get mosque number and count
+    // 3. Get mosque number and prepare a safe rq_number candidate
     const { data: mosqueData } = await supabase
       .from("mosques")
       .select("mosque_number")
       .eq("id", mosqueId)
       .single();
-
-    const { count } = await supabase
-      .from("requests")
-      .select("*", { count: "exact", head: true })
-      .eq("mosque_id", mosqueId);
-
-    const requestNumber = (count || 0) + 1;
     const mosqueNumber = mosqueData?.mosque_number || 1;
-    const rqNumber = `RQ-${mosqueNumber}-${requestNumber}`;
 
-    // 4. Insert
-    const insertData: RequestInsert = {
-      beneficiary_name: data.requester_name,
-      beneficiary_phone: data.requester_phone,
-      requester_role: data.requester_role,
-      mosque_id: mosqueId,
-      request_type_id: requestTypeId,
-      description: data.details,
-      current_status: "pending_review",
-      funding_type: null,
-      rq_number: rqNumber,
+    const rqPrefix = `RQ-${mosqueNumber}-`;
+    const { data: existingRqRows, error: existingRqRowsError } = await supabase
+      .from("requests")
+      .select("rq_number")
+      .eq("mosque_id", mosqueId)
+      .not("rq_number", "is", null);
+
+    if (existingRqRowsError) {
+      console.error("Error loading existing rq_number values:", existingRqRowsError);
+      throw existingRqRowsError;
+    }
+
+    const extractSuffix = (value: string | null | undefined): number | null => {
+      if (!value || !value.startsWith(rqPrefix)) return null;
+      const suffix = Number(value.slice(rqPrefix.length));
+      return Number.isFinite(suffix) && suffix > 0 ? suffix : null;
     };
 
-    const { data: request, error } = await supabase
-      .from("requests")
-      .insert(insertData)
-      .select()
-      .single();
+    let nextRequestNumber =
+      (existingRqRows || []).reduce((maxValue: number, row: { rq_number: string | null }) => {
+        const suffix = extractSuffix(row.rq_number);
+        return suffix && suffix > maxValue ? suffix : maxValue;
+      }, 0) + 1;
 
-    if (error) {
-      console.error("Error creating request:", error);
-      throw error;
+    const isDuplicateRqNumberError = (error: any): boolean => {
+      return (
+        error?.code === "23505" &&
+        typeof error?.message === "string" &&
+        error.message.includes("requests_rq_number_key")
+      );
+    };
+
+    let request: Request | null = null;
+    let lastInsertError: any = null;
+
+    // Retry a few times to handle concurrent inserts generating the same rq_number.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const rqNumber = `${rqPrefix}${nextRequestNumber}`;
+
+      const insertData: RequestInsert = {
+        beneficiary_name: data.requester_name,
+        beneficiary_phone: data.requester_phone,
+        requester_role: data.requester_role,
+        mosque_id: mosqueId,
+        request_type_id: requestTypeId,
+        description: data.details,
+        current_status: "pending_review",
+        funding_type: null,
+        rq_number: rqNumber,
+      };
+
+      const { data: insertedRequest, error } = await supabase
+        .from("requests")
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (!error) {
+        request = insertedRequest;
+        lastInsertError = null;
+        break;
+      }
+
+      lastInsertError = error;
+      if (!isDuplicateRqNumberError(error)) {
+        console.error("Error creating request:", error);
+        throw error;
+      }
+
+      nextRequestNumber += 1;
+    }
+
+    if (!request) {
+      console.error("Error creating request after retries:", lastInsertError);
+      throw lastInsertError;
     }
 
     if (request) {
@@ -457,7 +513,7 @@ export const requestService = {
         requester:profiles!requests_beneficiary_id_fkey(full_name, phone)
       `)
       .eq("assigned_technician_id", technicianId)
-      .in("current_status", ["pending_inspection", "in_progress", "pending_final_report"])
+      .in("current_status", ["pending_inspection", "pending_contractor_bids", "in_progress", "pending_final_report"])
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -504,30 +560,10 @@ export const requestService = {
 
     // مدير المشاريع: الحالات التي تتطلب اعتماد/قرار من المدير
     if (role === "project_manager") {
-      const { data, error } = await supabase
-        .from("requests")
-        .select(`
-          *,
-          mosque:mosques(name, city:cities(name), district:districts(name)),
-          request_type:request_types(name),
-          requester:profiles!requests_beneficiary_id_fkey(full_name, phone)
-        `)
-        .in("current_status", [
-          "accepted_initial",
-          "pending_inspection_approval",
-          "pending_pricing_approval",
-          "pending_funding",
-          "pending_final_approval",
-          "pending_closure",
-        ])
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching project manager requests:", error);
-        return [];
-      }
-
-      return data || [];
+      const allRequests = await this.getAllRequests();
+      return allRequests.filter((request: any) =>
+        PROJECT_MANAGER_ACTIONABLE_STATUSES.includes(request.current_status)
+      );
     }
 
     // الفني: الطلبات المسندة له في مراحل التنفيذ/المعاينة
@@ -587,12 +623,22 @@ export const requestService = {
    * Customer Service: Accept initial request
    */
   async acceptInitial(requestId: string, userId: string) {
-    return this.updateStatus(
+    const request = await this.updateStatus(
       requestId,
       "accepted_initial",
       userId,
       "تم القبول المبدئي من خدمة العملاء"
     );
+
+    const req = request as any;
+    await notificationService.notifyRole(
+      "project_manager",
+      "طلب جديد بانتظار تحديد الفريق",
+      `تم تحويل الطلب رقم ${req.rq_number} إلى مدير المشاريع لتحديد فريق المشروع`,
+      requestId
+    );
+
+    return request;
   },
 
   /**
@@ -822,19 +868,27 @@ export const requestService = {
   },
 
   /**
-   * Beneficiary: Approve request and select funding type
+   * Beneficiary: approve inspection and pricing before funding selection
    */
-  async approveBeneficiary(
+  async approveBeneficiaryPricing(
     requestId: string,
-    fundingType: string,
     amount?: number
   ): Promise<any> {
+    const { data: currentRequest, error: currentError } = await supabase
+      .from("requests")
+      .select("current_status")
+      .eq("id", requestId)
+      .single();
+
+    if (currentError) {
+      throw new Error(currentError.message);
+    }
+
     const updateData: any = {
-      funding_type: fundingType,
-      current_status: "pending_funding",
-      updated_at: new Date().toISOString()
+      current_status: "beneficiary_approved_pricing",
+      updated_at: new Date().toISOString(),
     };
-    
+
     if (amount) {
       updateData.approved_amount = amount;
     }
@@ -851,18 +905,68 @@ export const requestService = {
     }
 
     try {
-      const { data: session } = await supabase.auth.getSession();
-      const userId = session?.session?.user?.id;
+      await supabase.from("request_status_history").insert({
+        request_id: requestId,
+        previous_status: currentRequest?.current_status || "pending_beneficiary_approval",
+        new_status: "beneficiary_approved_pricing",
+        changed_by: null,
+        notes: "وافق المستفيد على المعاينة والتسعير",
+      });
+    } catch (err) {
+      console.error("Error adding beneficiary approval timeline entry:", err);
+    }
 
-      if (userId) {
-        await supabase.from("request_status_history").insert({
-          request_id: requestId,
-          previous_status: "pending_beneficiary_approval",
-          new_status: "pending_funding",
-          changed_by: userId,
-          notes: `تمت موافقة المستفيد - نوع التمويل: ${fundingType}`
-        });
-      }
+    return data;
+  },
+
+  /**
+   * Beneficiary: confirm funding channel and move request to pending_funding
+   */
+  async approveBeneficiary(
+    requestId: string,
+    fundingType: string,
+    amount?: number
+  ): Promise<any> {
+    const { data: currentRequest, error: currentError } = await supabase
+      .from("requests")
+      .select("current_status")
+      .eq("id", requestId)
+      .single();
+
+    if (currentError) {
+      throw new Error(currentError.message);
+    }
+
+    const updateData: any = {
+      funding_type: fundingType,
+      current_status: "pending_funding",
+      approved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (amount) {
+      updateData.approved_amount = amount;
+    }
+
+    const { data, error } = await supabase
+      .from("requests")
+      .update(updateData)
+      .eq("id", requestId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    try {
+      await supabase.from("request_status_history").insert({
+        request_id: requestId,
+        previous_status: currentRequest?.current_status || "beneficiary_approved_pricing",
+        new_status: "pending_funding",
+        changed_by: null,
+        notes: `اختار المستفيد قناة الدعم: ${fundingType}`,
+      });
     } catch (err) {
       console.error("Error adding timeline entry:", err);
     }

@@ -762,6 +762,8 @@ export type Database = {
           description: string
           funding_completed: boolean | null
           funding_completed_at: string | null
+          funding_channel_data: Json
+          funding_completion_phrase: string | null
           funding_type: Database["public"]["Enums"]["funding_type"] | null
           id: string
           mosque_id: string
@@ -786,6 +788,8 @@ export type Database = {
           description: string
           funding_completed?: boolean | null
           funding_completed_at?: string | null
+          funding_channel_data?: Json
+          funding_completion_phrase?: string | null
           funding_type?: Database["public"]["Enums"]["funding_type"] | null
           id?: string
           mosque_id: string
@@ -810,6 +814,8 @@ export type Database = {
           description?: string
           funding_completed?: boolean | null
           funding_completed_at?: string | null
+          funding_channel_data?: Json
+          funding_completion_phrase?: string | null
           funding_type?: Database["public"]["Enums"]["funding_type"] | null
           id?: string
           mosque_id?: string
@@ -938,6 +944,7 @@ export type Database = {
         | "pending_expert_pricing"
         | "pending_pricing_approval"
         | "pending_beneficiary_approval"
+        | "beneficiary_approved_pricing"
         | "pending_funding"
         | "pending_contractor_bids"
         | "pending_final_approval"
@@ -946,7 +953,27 @@ export type Database = {
         | "pending_closure"
         | "closed"
         | "cancelled"
-      user_role:
+        request_status:
+          | "pending_review"
+          | "accepted_initial"
+          | "rejected"
+          | "approved"
+          | "pending_inspection"
+          | "pending_inspection_approval"
+          | "pending_expert_pricing"
+          | "pending_pricing_approval"
+          | "pending_beneficiary_approval"
+          | "beneficiary_approved_pricing"
+          | "pending_funding"
+          | "pending_contractor_bids"
+          | "pending_contractor_selection"
+          | "pending_final_approval"
+          | "in_progress"
+          | "pending_final_report"
+          | "pending_closure"
+          | "closed"
+          | "cancelled"
+        user_role:
         | "beneficiary"
         | "customer_service"
         | "project_manager"
@@ -1092,6 +1119,7 @@ export const Constants = {
         "pending_expert_pricing",
         "pending_pricing_approval",
         "pending_beneficiary_approval",
+        "beneficiary_approved_pricing",
         "pending_funding",
         "pending_contractor_bids",
         "pending_final_approval",
@@ -1101,7 +1129,28 @@ export const Constants = {
         "closed",
         "cancelled",
       ],
-      user_role: [
+        request_status: [
+          "pending_review",
+          "accepted_initial",
+          "rejected",
+          "approved",
+          "pending_inspection",
+          "pending_inspection_approval",
+          "pending_expert_pricing",
+          "pending_pricing_approval",
+          "pending_beneficiary_approval",
+          "beneficiary_approved_pricing",
+          "pending_funding",
+          "pending_contractor_bids",
+          "pending_contractor_selection",
+          "pending_final_approval",
+          "in_progress",
+          "pending_final_report",
+          "pending_closure",
+          "closed",
+          "cancelled",
+        ],
+        user_role:
         "beneficiary",
         "customer_service",
         "project_manager",

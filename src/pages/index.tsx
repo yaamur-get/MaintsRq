@@ -38,7 +38,9 @@ interface MosqueWithDetails extends Mosque {
 }
 
 export default function Home() {
-  const requesterRoleOptions = Object.entries(REQUESTER_ROLE_LABELS);
+  const requesterRoleOptions = Object.entries(REQUESTER_ROLE_LABELS).filter(
+    ([value]) => value !== "mosque_congregation"
+  );
 
   const [formData, setFormData] = useState<CreateRequestData>({
     requester_name: "",
