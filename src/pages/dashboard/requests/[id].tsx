@@ -92,6 +92,12 @@ type FundingChannelData = {
   };
 };
 
+const FUNDING_TYPE_LABELS: Record<FundingType, string> = {
+  ehsan: "إحسان",
+  direct_donor: "متبرع مباشر",
+  store_opportunity: "فرصة متجر",
+};
+
 const REQUIRED_FUNDING_CONFIRMATION_TEXT = "تم اكتمال المبلغ";
 
 const parseFundingChannelData = (value: any): FundingChannelData => {
@@ -349,6 +355,9 @@ export default function RequestDetails() {
   const fundingChannelData = parseFundingChannelData((request as any)?.funding_channel_data);
   const directDonorProofUrl = fundingChannelData.directDonor?.proofFileUrl || "";
   const directDonorProofName = fundingChannelData.directDonor?.proofFileName || "";
+  const beneficiaryTrackingUrl = request?.id && request?.beneficiary_phone
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/approval/tracking/${request.id}?phone=${encodeURIComponent(request.beneficiary_phone)}`
+    : "";
   const hasEhsanChecklistCompleted =
     ehsanChecklist.submitted &&
     ehsanChecklist.approved &&
@@ -2743,9 +2752,7 @@ export default function RequestDetails() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-slate-600">قناة الدعم</span>
                         <Badge variant="outline">
-                          {request.funding_type === "ehsan" && "إحسان"}
-                          {request.funding_type === "direct_donor" && "متبرع مباشر"}
-                          {request.funding_type === "store_opportunity" && "فرصة متجر"}
+                          {request.funding_type && FUNDING_TYPE_LABELS[request.funding_type as FundingType]}
                           {!request.funding_type && "لم يتم التحديد"}
                         </Badge>
                       </div>
@@ -2800,6 +2807,69 @@ export default function RequestDetails() {
                           <p className="text-xs text-slate-700">{fundingChannelData.ehsan.checklist.amountReceived ? "✅" : "⬜"} وصل المبلغ</p>
                         </div>
                       )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {request && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <LinkIcon className="w-5 h-5" />
+                      بيانات المستفيد والمتابعة
+                    </CardTitle>
+                    <CardDescription>
+                      تبقى هذه المعلومات ظاهرة داخل تفاصيل الطلب حتى بعد الانتقال للمراحل التالية.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-sm text-slate-600 mb-1">اسم المستفيد</p>
+                          <p className="font-bold text-slate-900">{request.beneficiary_name || "-"}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-sm text-slate-600 mb-1">قناة الدعم المختارة</p>
+                          <p className="font-bold text-slate-900">
+                            {request.funding_type ? FUNDING_TYPE_LABELS[request.funding_type as FundingType] : "لم يتم اختيارها بعد"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-200 bg-white p-4">
+                        <p className="text-sm text-slate-600 mb-2">رابط متابعة المستفيد</p>
+                        {beneficiaryTrackingUrl ? (
+                          <div className="flex gap-2">
+                            <Input
+                              readOnly
+                              value={beneficiaryTrackingUrl}
+                              className="font-mono text-sm"
+                              dir="ltr"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="shrink-0"
+                              onClick={() => {
+                                navigator.clipboard.writeText(beneficiaryTrackingUrl);
+                                alert("✅ تم نسخ رابط متابعة المستفيد");
+                              }}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-500">لا يمكن إنشاء الرابط لعدم توفر رقم الجوال أو معرف الطلب.</p>
+                        )}
+                      </div>
+
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
+                        <p className="text-sm text-slate-600 mb-1">رقم الجوال المستخدم في الرابط</p>
+                        <p className="font-mono text-slate-900 tracking-wider">{request.beneficiary_phone || "-"}</p>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

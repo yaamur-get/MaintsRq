@@ -159,11 +159,18 @@ export default function PricingPage() {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
-    
-    // حفظ فوري عند تحديث السعر
-    if (field === "unitPrice" && value && parseFloat(value) > 0) {
-      saveItemPrice(index, newItems[index]);
+  };
+
+  const handlePriceBlur = async (index: number) => {
+    const item = items[index];
+    if (!item?.unitPrice) return;
+
+    const unitPrice = parseFloat(item.unitPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      return;
     }
+
+    await saveItemPrice(index, item);
   };
 
   const saveItemPrice = async (index: number, item: PricingItem) => {
@@ -444,6 +451,7 @@ export default function PricingPage() {
                           min="0"
                           value={item.unitPrice}
                           onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
+                          onBlur={() => void handlePriceBlur(index)}
                           placeholder="0.00"
                           className="pr-10"
                         />

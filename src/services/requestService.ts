@@ -102,26 +102,32 @@ export const requestService = {
       throw new Error("Could not determine request type");
     }
 
-    // 2. Handle Mosque ID
-    let mosqueId = data.mosque_id;
+    // 2. Require explicit mosque selection to avoid assigning requests to the wrong mosque.
+    const mosqueId = data.mosque_id;
     if (!mosqueId) {
-      const { data: anyMosque } = await supabase
-        .from("mosques")
-        .select("id")
-        .limit(1)
-        .single();
-        
-      if (!anyMosque) throw new Error("No mosques available in system to link request");
-      mosqueId = anyMosque.id;
+      throw new Error("يرجى اختيار المسجد قبل إرسال الطلب");
     }
 
-    // 3. Get mosque number and prepare a safe rq_number candidate
-    const { data: mosqueData } = await supabase
+    // 3. Derive mosque sequence from registry order to avoid relying on optional columns.
+    const { data: allMosques, error: allMosquesError } = await supabase
       .from("mosques")
-      .select("mosque_number")
-      .eq("id", mosqueId)
-      .single();
-    const mosqueNumber = mosqueData?.mosque_number || 1;
+      .select("id, created_at")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
+
+    if (allMosquesError) {
+      console.error("Error deriving mosque sequence for rq_number generation:", allMosquesError);
+      throw allMosquesError;
+    }
+
+    const orderedMosques = allMosques || [];
+    const mosqueOrderIndex = orderedMosques.findIndex((m: { id: string }) => m.id === mosqueId);
+
+    if (mosqueOrderIndex < 0) {
+      throw new Error("المسجد المحدد غير موجود");
+    }
+
+    const mosqueNumber = mosqueOrderIndex + 1;
 
     const rqPrefix = `RQ-${mosqueNumber}-`;
     const { data: existingRqRows, error: existingRqRowsError } = await supabase

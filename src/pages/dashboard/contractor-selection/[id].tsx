@@ -20,6 +20,10 @@ type PricingItem = {
   subItem: string;
   quantity: number;
   unit: string;
+  specifications: string;
+  expertUnitPrice: number | null;
+  expertTotal: number;
+  expertNotes: string;
 };
 
 type ContractorBidItem = {
@@ -27,8 +31,11 @@ type ContractorBidItem = {
   mainItem: string;
   subItem: string;
   bidAmount: number | null;
+  unitPrice: number | null;
   details: string;
   bidStatus: "offered" | "not_offered";
+  differenceFromExpert: number | null;
+  differencePercent: number | null;
 };
 
 type ContractorBidGroup = {
@@ -36,10 +43,38 @@ type ContractorBidGroup = {
   contractorName: string;
   contractorPhone: string;
   contractorEmail: string;
+  contractorSpecialization: string;
+  contractorRating: number | null;
+  contractorLicenseNumber: string;
   bidFileUrl: string;
   items: ContractorBidItem[];
   total: number;
   coverageCount: number;
+  comparableExpertTotal: number;
+  totalDifferenceFromExpert: number;
+  totalDifferencePercent: number | null;
+};
+
+const formatCurrency = (value: number | null | undefined) => {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return `${value.toLocaleString("ar-SA")} ر.س`;
+};
+
+const getVarianceLabel = (differencePercent: number | null) => {
+  if (differencePercent === null || Number.isNaN(differencePercent)) {
+    return { label: "لا توجد مقارنة", className: "bg-slate-100 text-slate-700 border-slate-200" };
+  }
+
+  const absPercent = Math.abs(differencePercent);
+  if (absPercent <= 5) {
+    return { label: "قريب من تسعير الخبير", className: "bg-emerald-100 text-emerald-800 border-emerald-200" };
+  }
+
+  if (differencePercent < 0) {
+    return { label: "أقل من تسعير الخبير", className: "bg-amber-100 text-amber-800 border-amber-200" };
+  }
+
+  return { label: "أعلى من تسعير الخبير", className: "bg-rose-100 text-rose-800 border-rose-200" };
 };
 
 export default function ContractorSelectionPage() {
@@ -56,7 +91,7 @@ export default function ContractorSelectionPage() {
   const [selectedContractorId, setSelectedContractorId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (id) loadData();
+    if (id) void loadData();
   }, [id]);
 
   const loadData = async () => {
@@ -66,73 +101,104 @@ export default function ContractorSelectionPage() {
       setRequest(requestData);
 
       const pricing = await pricingService.getExpertPricing(id as string);
-      const items: PricingItem[] = pricing.map((p: any) => ({
-        itemId: p.external_report_item_id || p.inspection_item_id || p.id,
-        externalReportItemId: p.external_report_item_id,
-        inspectionItemId: p.inspection_item_id,
-        mainItem: p.item_main_name || "بند",
-        subItem: p.item_sub_name || "-",
-        quantity: Number(p.quantity || 1),
-        unit: p.item_unit || "",
+      const items: PricingItem[] = pricing.map((pricingRow: any) => ({
+        itemId: pricingRow.external_report_item_id || pricingRow.inspection_item_id || pricingRow.id,
+        externalReportItemId: pricingRow.external_report_item_id,
+        inspectionItemId: pricingRow.inspection_item_id,
+        mainItem: pricingRow.item_main_name || "بند",
+        subItem: pricingRow.item_sub_name || "-",
+        quantity: Number(pricingRow.quantity || 1),
+        unit: pricingRow.item_unit || "",
+        specifications: pricingRow.item_specifications || "",
+        expertUnitPrice: typeof pricingRow.unit_price === "number" ? pricingRow.unit_price : Number(pricingRow.unit_price || 0) || null,
+        expertTotal: Number(pricingRow.estimated_price || 0),
+        expertNotes: pricingRow.pricing_notes || "",
       }));
       setPricingItems(items);
 
       const bids = await pricingService.getContractorBids(id as string);
-
       const byContractor = new Map<string, any[]>();
+
       for (const bid of bids) {
-        const cid = bid.contractor_id;
-        if (!byContractor.has(cid)) byContractor.set(cid, []);
-        byContractor.get(cid)!.push(bid);
+        const contractorId = bid.contractor_id;
+        if (!byContractor.has(contractorId)) byContractor.set(contractorId, []);
+        byContractor.get(contractorId)!.push(bid);
       }
 
       const groups: ContractorBidGroup[] = [];
 
-      for (const [cid, cBids] of byContractor.entries()) {
-        const c = cBids[0].contractor;
+      for (const [contractorId, contractorBids] of byContractor.entries()) {
+        const contractor = contractorBids[0].contractor;
 
-        const groupItems: ContractorBidItem[] = items.map((p) => {
-          const match = cBids.find(
-            (b: any) =>
-              (p.externalReportItemId && b.external_report_item_id === p.externalReportItemId) ||
-              (p.inspectionItemId && b.inspection_item_id === p.inspectionItemId) ||
-              (b.item_main_name === p.mainItem && b.item_sub_name === p.subItem)
+        const groupItems: ContractorBidItem[] = items.map((pricingItem) => {
+          const match = contractorBids.find(
+            (bid: any) =>
+              (pricingItem.externalReportItemId && bid.external_report_item_id === pricingItem.externalReportItemId) ||
+              (pricingItem.inspectionItemId && bid.inspection_item_id === pricingItem.inspectionItemId) ||
+              (bid.item_main_name === pricingItem.mainItem && bid.item_sub_name === pricingItem.subItem)
           );
 
           const bidStatus = match?.bid_status === "not_offered" ? "not_offered" : "offered";
-          const bidAmount = bidStatus === "offered" ? Number(match?.bid_amount || 0) : null;
+          const rawBidAmount = bidStatus === "offered" ? Number(match?.bid_amount || 0) : null;
+          const bidAmount = rawBidAmount && rawBidAmount > 0 ? rawBidAmount : null;
+          const differenceFromExpert = bidAmount !== null ? bidAmount - pricingItem.expertTotal : null;
+          const differencePercent = bidAmount !== null && pricingItem.expertTotal > 0
+            ? (differenceFromExpert! / pricingItem.expertTotal) * 100
+            : null;
 
           return {
-            itemId: p.itemId,
-            mainItem: p.mainItem,
-            subItem: p.subItem,
-            bidAmount: bidAmount && bidAmount > 0 ? bidAmount : null,
+            itemId: pricingItem.itemId,
+            mainItem: pricingItem.mainItem,
+            subItem: pricingItem.subItem,
+            bidAmount,
+            unitPrice: bidAmount !== null && pricingItem.quantity > 0 ? bidAmount / pricingItem.quantity : null,
             details: match?.notes || "",
             bidStatus,
+            differenceFromExpert,
+            differencePercent,
           };
         });
 
-        const coverageCount = groupItems.filter((item) => item.bidStatus === "offered" && (item.bidAmount || 0) > 0).length;
-        const total = groupItems.reduce((s, it) => s + (it.bidAmount || 0), 0);
+        const coverageCount = groupItems.filter((item) => item.bidAmount !== null).length;
+        const total = groupItems.reduce((sum, item) => sum + (item.bidAmount || 0), 0);
+        const comparableExpertTotal = items.reduce((sum, pricingItem) => {
+          const itemBid = groupItems.find((groupItem) => groupItem.itemId === pricingItem.itemId);
+          return itemBid?.bidAmount !== null ? sum + pricingItem.expertTotal : sum;
+        }, 0);
+        const totalDifferenceFromExpert = total - comparableExpertTotal;
+        const totalDifferencePercent = comparableExpertTotal > 0
+          ? (totalDifferenceFromExpert / comparableExpertTotal) * 100
+          : null;
 
-        const hasSelected = cBids.some((b: any) => b.is_selected);
-        if (hasSelected) setSelectedContractorId(cid);
+        const hasSelected = contractorBids.some((bid: any) => bid.is_selected);
+        if (hasSelected) setSelectedContractorId(contractorId);
 
         groups.push({
-          contractorId: cid,
-          contractorName: c?.name || "مقاول",
-          contractorPhone: c?.phone || "",
-          contractorEmail: c?.email || "",
-          bidFileUrl: cBids[0]?.bid_document_url || "",
+          contractorId,
+          contractorName: contractor?.name || "مقاول",
+          contractorPhone: contractor?.phone || "",
+          contractorEmail: contractor?.email || "",
+          contractorSpecialization: contractor?.specialization || "غير محدد",
+          contractorRating: contractor?.rating ?? null,
+          contractorLicenseNumber: contractor?.license_number || "",
+          bidFileUrl: contractorBids[0]?.bid_document_url || "",
           items: groupItems,
           total,
           coverageCount,
+          comparableExpertTotal,
+          totalDifferenceFromExpert,
+          totalDifferencePercent,
         });
       }
 
-      groups.sort((a, b) => {
-        if (b.coverageCount !== a.coverageCount) return b.coverageCount - a.coverageCount;
-        return a.total - b.total;
+      groups.sort((left, right) => {
+        if (right.coverageCount !== left.coverageCount) return right.coverageCount - left.coverageCount;
+
+        const leftDiff = left.totalDifferencePercent === null ? Number.POSITIVE_INFINITY : Math.abs(left.totalDifferencePercent);
+        const rightDiff = right.totalDifferencePercent === null ? Number.POSITIVE_INFINITY : Math.abs(right.totalDifferencePercent);
+        if (leftDiff !== rightDiff) return leftDiff - rightDiff;
+
+        return left.total - right.total;
       });
 
       setBidGroups(groups);
@@ -143,6 +209,11 @@ export default function ContractorSelectionPage() {
       setLoading(false);
     }
   };
+
+  const expertTotal = useMemo(
+    () => pricingItems.reduce((sum, item) => sum + item.expertTotal, 0),
+    [pricingItems]
+  );
 
   const lowestPerItem = useMemo(() => {
     const map = new Map<string, number | null>();
@@ -157,6 +228,25 @@ export default function ContractorSelectionPage() {
 
     return map;
   }, [pricingItems, bidGroups]);
+
+  const closestToExpertPerItem = useMemo(() => {
+    const map = new Map<string, number | null>();
+
+    for (const item of pricingItems) {
+      const differences = bidGroups
+        .map((group) => group.items.find((it) => it.itemId === item.itemId)?.differenceFromExpert)
+        .filter((difference): difference is number => typeof difference === "number");
+
+      map.set(item.itemId, differences.length ? Math.min(...differences.map((difference) => Math.abs(difference))) : null);
+    }
+
+    return map;
+  }, [pricingItems, bidGroups]);
+
+  const fullyCoveredContractors = useMemo(
+    () => bidGroups.filter((group) => group.coverageCount === pricingItems.length).length,
+    [bidGroups, pricingItems.length]
+  );
 
   const handleSelectContractor = async (contractorId: string) => {
     try {
@@ -178,7 +268,7 @@ export default function ContractorSelectionPage() {
       await requestService.updateRequestStatus(
         id as string,
         "in_progress" as any,
-        `تم اختيار المقاول واعتماد العرض - ${bidGroups.find((g) => g.contractorId === contractorId)?.contractorName}`
+        `تم اختيار المقاول واعتماد العرض - ${bidGroups.find((group) => group.contractorId === contractorId)?.contractorName}`
       );
 
       setSelectedContractorId(contractorId);
@@ -219,7 +309,7 @@ export default function ContractorSelectionPage() {
             <div>
               <h2 className="text-2xl font-bold text-slate-900">اختيار المقاول</h2>
               <p className="text-slate-500 text-sm">
-                {request?.rq_number || id} · {request?.mosque?.name} · {bidGroups.length} عرض
+                {request?.rq_number || id} · {request?.mosque?.name} · {bidGroups.length} عرض · مرجع الخبير {formatCurrency(expertTotal)}
               </p>
             </div>
           </div>
@@ -258,11 +348,40 @@ export default function ContractorSelectionPage() {
             </Card>
           ) : (
             <>
+              <div className="grid gap-4 md:grid-cols-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-slate-500">إجمالي تسعير الخبير</p>
+                    <p className="mt-2 text-2xl font-bold text-charity-primary">{formatCurrency(expertTotal)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-slate-500">عدد البنود المرجعية</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">{pricingItems.length}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-slate-500">العروض كاملة التغطية</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">{fullyCoveredContractors}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <p className="text-sm text-slate-500">أقل إجمالي معروض</p>
+                    <p className="mt-2 text-2xl font-bold text-emerald-700">
+                      {bidGroups.length ? formatCurrency(Math.min(...bidGroups.map((group) => group.total))) : "—"}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Award className="w-5 h-5 text-charity-primary" />
-                    ملخص المقاولين (إجمالي + تغطية)
+                    ملخص المقاولين والمقارنة المرجعية
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -271,38 +390,60 @@ export default function ContractorSelectionPage() {
                       <thead>
                         <tr className="border-b bg-slate-50">
                           <th className="text-right py-3 pr-4 font-semibold text-slate-700">المقاول</th>
+                          <th className="text-right py-3 font-semibold text-slate-700">بيانات إضافية</th>
                           <th className="text-center py-3 font-semibold text-slate-700">نسبة التغطية</th>
                           <th className="text-left py-3 font-semibold text-slate-700 whitespace-nowrap">إجمالي البنود المقدمة</th>
+                          <th className="text-center py-3 font-semibold text-slate-700 whitespace-nowrap">الفرق عن تسعير الخبير</th>
                           <th className="text-center py-3 font-semibold text-slate-700">الملف</th>
                           <th className="text-center py-3 pl-4 font-semibold text-slate-700">الإجراء</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {bidGroups.map((g) => {
-                          const isSelected = selectedContractorId === g.contractorId;
+                        {bidGroups.map((group) => {
+                          const isSelected = selectedContractorId === group.contractorId;
+                          const variance = getVarianceLabel(group.totalDifferencePercent);
+
                           return (
-                            <tr key={g.contractorId} className={`border-b last:border-0 ${isSelected ? "bg-green-50" : ""}`}>
-                              <td className="py-3 pr-4">
+                            <tr key={group.contractorId} className={`border-b last:border-0 ${isSelected ? "bg-green-50" : ""}`}>
+                              <td className="py-3 pr-4 align-top">
                                 <div>
-                                  <p className="font-semibold text-slate-900">{g.contractorName}</p>
+                                  <p className="font-semibold text-slate-900">{group.contractorName}</p>
                                   <p className="text-xs text-slate-500" dir="ltr">
-                                    {g.contractorPhone || ""} {g.contractorEmail ? `· ${g.contractorEmail}` : ""}
+                                    {group.contractorPhone || ""} {group.contractorEmail ? `· ${group.contractorEmail}` : ""}
                                   </p>
                                 </div>
                               </td>
-                              <td className="py-3 text-center">
+                              <td className="py-3 align-top">
+                                <div className="space-y-1 text-xs text-slate-600">
+                                  <p>التخصص: <span className="font-semibold text-slate-800">{group.contractorSpecialization}</span></p>
+                                  <p>التقييم: <span className="font-semibold text-slate-800">{group.contractorRating ?? "غير متوفر"}</span></p>
+                                  <p>الرخصة: <span className="font-semibold text-slate-800">{group.contractorLicenseNumber || "غير متوفرة"}</span></p>
+                                </div>
+                              </td>
+                              <td className="py-3 text-center align-top">
                                 <Badge variant="outline" className="font-semibold">
-                                  {g.coverageCount}/{pricingItems.length}
+                                  {group.coverageCount}/{pricingItems.length}
                                 </Badge>
                               </td>
-                              <td className="py-3">
-                                <p className="font-bold text-base text-charity-primary whitespace-nowrap">
-                                  {g.total.toLocaleString("ar-SA")} ر.س
+                              <td className="py-3 align-top">
+                                <p className="font-bold text-base text-charity-primary whitespace-nowrap">{formatCurrency(group.total)}</p>
+                                <p className="text-xs text-slate-500 mt-1 whitespace-nowrap">
+                                  مقابل بنود خبير بقيمة {formatCurrency(group.comparableExpertTotal)}
                                 </p>
                               </td>
-                              <td className="py-3 text-center">
-                                {g.bidFileUrl ? (
-                                  <a href={g.bidFileUrl} target="_blank" rel="noopener noreferrer">
+                              <td className="py-3 text-center align-top">
+                                <div className="space-y-2">
+                                  <Badge className={`${variance.className} border`}>{variance.label}</Badge>
+                                  <p className={`text-xs font-semibold ${group.totalDifferenceFromExpert <= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                                    {group.totalDifferencePercent === null
+                                      ? "—"
+                                      : `${group.totalDifferenceFromExpert >= 0 ? "+" : ""}${group.totalDifferenceFromExpert.toLocaleString("ar-SA")} ر.س (${group.totalDifferencePercent.toFixed(1)}%)`}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="py-3 text-center align-top">
+                                {group.bidFileUrl ? (
+                                  <a href={group.bidFileUrl} target="_blank" rel="noopener noreferrer">
                                     <Button variant="outline" size="sm">
                                       <FileText className="w-3.5 h-3.5 ml-1" /> عرض
                                     </Button>
@@ -311,7 +452,7 @@ export default function ContractorSelectionPage() {
                                   <span className="text-slate-400 text-xs">—</span>
                                 )}
                               </td>
-                              <td className="py-3 pl-4 text-center">
+                              <td className="py-3 pl-4 text-center align-top">
                                 {isSelected ? (
                                   <Badge className="bg-green-600 text-white">تم الاختيار</Badge>
                                 ) : (
@@ -319,9 +460,9 @@ export default function ContractorSelectionPage() {
                                     size="sm"
                                     className="bg-charity-primary hover:bg-charity-dark"
                                     disabled={!!selecting || success}
-                                    onClick={() => handleSelectContractor(g.contractorId)}
+                                    onClick={() => handleSelectContractor(group.contractorId)}
                                   >
-                                    {selecting === g.contractorId ? (
+                                    {selecting === group.contractorId ? (
                                       <>
                                         <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white ml-1" /> جاري...
                                       </>
@@ -342,17 +483,18 @@ export default function ContractorSelectionPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base text-slate-700">Matrix مقارنة البنود</CardTitle>
+                  <CardTitle className="text-base text-slate-700">Matrix مقارنة البنود والتفاصيل</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm border-collapse">
                       <thead>
                         <tr className="bg-slate-50 border-b">
-                          <th className="text-right py-2 pr-3 font-medium text-slate-600 min-w-[180px]">البند</th>
-                          {bidGroups.map((g) => (
-                            <th key={g.contractorId} className="text-center py-2 font-medium text-slate-700 min-w-[130px]">
-                              {g.contractorName}
+                          <th className="text-right py-2 pr-3 font-medium text-slate-600 min-w-[240px]">البند</th>
+                          <th className="text-center py-2 font-medium text-slate-700 min-w-[180px]">مرجع الخبير</th>
+                          {bidGroups.map((group) => (
+                            <th key={group.contractorId} className="text-center py-2 font-medium text-slate-700 min-w-[220px]">
+                              {group.contractorName}
                             </th>
                           ))}
                           <th className="text-center py-2 font-medium text-green-700 min-w-[120px]">أقل سعر للبند</th>
@@ -363,32 +505,59 @@ export default function ContractorSelectionPage() {
                           const minBid = lowestPerItem.get(item.itemId);
 
                           return (
-                            <tr key={item.itemId} className="border-b last:border-0 hover:bg-slate-50">
-                              <td className="py-2.5 pr-3">
+                            <tr key={item.itemId} className="border-b last:border-0 align-top hover:bg-slate-50">
+                              <td className="py-3 pr-3">
                                 <p className="font-medium text-slate-900">{item.mainItem}</p>
-                                <p className="text-xs text-slate-500">
-                                  {item.subItem} · الكمية: {item.quantity} {item.unit}
-                                </p>
+                                <p className="text-xs text-slate-500">{item.subItem} · الكمية: {item.quantity} {item.unit}</p>
+                                {item.specifications && <p className="text-xs text-slate-500 mt-1">{item.specifications}</p>}
+                              </td>
+
+                              <td className="py-3 text-center bg-slate-50/60">
+                                <p className="font-bold text-slate-900 whitespace-nowrap">{formatCurrency(item.expertTotal)}</p>
+                                <p className="text-xs text-slate-500 whitespace-nowrap">الوحدة: {formatCurrency(item.expertUnitPrice)}</p>
+                                {item.expertNotes && <p className="text-[11px] text-slate-500 mt-1 px-2 leading-5">{item.expertNotes}</p>}
                               </td>
 
                               {bidGroups.map((group) => {
-                                const bid = group.items.find((it) => it.itemId === item.itemId);
+                                const bid = group.items.find((contractorItem) => contractorItem.itemId === item.itemId);
                                 const isBest = typeof bid?.bidAmount === "number" && bid.bidAmount > 0 && bid.bidAmount === minBid;
+                                const closestDifference = closestToExpertPerItem.get(item.itemId);
+                                const isClosestToExpert =
+                                  typeof bid?.differenceFromExpert === "number" &&
+                                  typeof closestDifference === "number" &&
+                                  Math.abs(bid.differenceFromExpert) === closestDifference;
+                                const variance = getVarianceLabel(bid?.differencePercent ?? null);
 
                                 return (
                                   <td
                                     key={group.contractorId}
-                                    className={`py-2.5 text-center whitespace-nowrap ${isBest ? "bg-green-50 text-green-700 font-bold" : "text-slate-700"}`}
+                                    className={`py-3 text-center ${isBest ? "bg-green-50" : "text-slate-700"}`}
                                   >
-                                    {typeof bid?.bidAmount === "number" && bid.bidAmount > 0
-                                      ? `${bid.bidAmount.toLocaleString("ar-SA")} ر.س`
-                                      : "غير مقدم"}
+                                    {typeof bid?.bidAmount === "number" && bid.bidAmount > 0 ? (
+                                      <div className="space-y-1 px-2">
+                                        <p className={`font-bold whitespace-nowrap ${isBest ? "text-green-700" : "text-slate-900"}`}>{formatCurrency(bid.bidAmount)}</p>
+                                        <p className="text-[11px] text-slate-500 whitespace-nowrap">الوحدة: {formatCurrency(bid.unitPrice)}</p>
+                                        <Badge className={`${variance.className} border text-[10px]`}>{variance.label}</Badge>
+                                        {isClosestToExpert && <p className="text-[11px] font-semibold text-blue-700">الأقرب لتقدير الخبير</p>}
+                                        {typeof bid.differenceFromExpert === "number" && (
+                                          <p className={`text-[11px] font-semibold ${bid.differenceFromExpert <= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                                            {bid.differenceFromExpert >= 0 ? "+" : ""}{bid.differenceFromExpert.toLocaleString("ar-SA")} ر.س
+                                          </p>
+                                        )}
+                                        <p className="text-[11px] text-slate-500 leading-5 whitespace-normal">{bid.details || "لم تُذكر تفاصيل ما يشمله العرض"}</p>
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-1 px-2">
+                                        <p className="text-slate-400">غير مقدم</p>
+                                        <p className="text-[11px] text-slate-400 leading-5 whitespace-normal">هذا البند غير مشمول في عرض المقاول</p>
+                                      </div>
+                                    )}
                                   </td>
                                 );
                               })}
 
-                              <td className="py-2.5 text-center font-semibold text-green-700 whitespace-nowrap">
-                                {typeof minBid === "number" ? `${minBid.toLocaleString("ar-SA")} ر.س` : "—"}
+                              <td className="py-3 text-center font-semibold text-green-700 whitespace-nowrap">
+                                {typeof minBid === "number" ? formatCurrency(minBid) : "—"}
                               </td>
                             </tr>
                           );
@@ -397,15 +566,17 @@ export default function ContractorSelectionPage() {
                       <tfoot>
                         <tr className="border-t-2 bg-slate-50">
                           <td className="py-3 pr-3 font-bold text-slate-800">الإجمالي</td>
+                          <td className="py-3 text-center font-bold text-slate-900 whitespace-nowrap">{formatCurrency(expertTotal)}</td>
                           {bidGroups.map((group) => (
                             <td key={group.contractorId} className="py-3 text-center font-bold text-charity-primary whitespace-nowrap">
-                              {group.total.toLocaleString("ar-SA")} ر.س
+                              {formatCurrency(group.total)}
                             </td>
                           ))}
                           <td className="py-3 text-center text-slate-400">—</td>
                         </tr>
                         <tr className="bg-slate-50">
                           <td className="py-3 pr-3 font-bold text-slate-800">نسبة التغطية</td>
+                          <td className="py-3 text-center font-bold text-slate-700 whitespace-nowrap">مرجع كامل</td>
                           {bidGroups.map((group) => (
                             <td key={group.contractorId} className="py-3 text-center font-bold text-slate-700 whitespace-nowrap">
                               {group.coverageCount}/{pricingItems.length}
