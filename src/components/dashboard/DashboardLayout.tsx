@@ -13,7 +13,6 @@ import {
   X,
   Bell,
   Landmark,
-  Building,
   MapPin
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
@@ -175,22 +174,7 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
               );
             })}
             
-            <Link href="/dashboard/mosques">
-              <Button
-                variant={router.pathname === "/dashboard/mosques" ? "default" : "ghost"}
-                className={`w-full justify-start gap-3 ${
-                  router.pathname === "/dashboard/mosques"
-                    ? "bg-charity-primary text-white hover:bg-charity-dark"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <Building className="w-5 h-5" />
-                <span>إدارة المساجد</span>
-              </Button>
-            </Link>
-
-            {(userRole === "customer_service" || userRole === "admin") && (
+            {(actualUserRole === "customer_service" || actualUserRole === "admin") && (
               <Link href="/dashboard/mosque-additions">
                 <Button
                   variant={router.pathname === "/dashboard/mosque-additions" ? "default" : "ghost"}

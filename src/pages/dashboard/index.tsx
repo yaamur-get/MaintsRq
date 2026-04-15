@@ -322,6 +322,7 @@ export default function DashboardHome() {
         case "project_manager":
           return [
             "accepted_initial",
+            "pending_rejection_approval",
             "pending_inspection_approval",
             "pending_pricing_approval",
             "beneficiary_approved_pricing",
@@ -351,6 +352,7 @@ export default function DashboardHome() {
     const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
       pending_review: { label: "بانتظار مراجعة خدمة العملاء", variant: "outline" },
       accepted_initial: { label: "بانتظار إجراء مدير المشاريع", variant: "outline" },
+      pending_rejection_approval: { label: "مرفوض من خدمة العملاء - بانتظار تأكيد المدير", variant: "destructive" },
       pending_inspection: { label: "بانتظار المعاينة", variant: "secondary" },
       pending_inspection_approval: { label: "بانتظار اعتماد المعاينة", variant: "outline" },
       pending_expert_pricing: { label: "بانتظار التسعير", variant: "secondary" },

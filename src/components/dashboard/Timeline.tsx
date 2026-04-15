@@ -20,7 +20,7 @@ interface TimelineProps {
 const getTimelineActorLabel = (event: TimelineEvent) => {
   const fullName = event.changed_by_user?.full_name?.trim();
   if (fullName) return fullName;
-  if (event.new_status === "pending_review") return "خدمة العملاء";
+  if (event.new_status === "pending_review" || event.new_status === "pending_rejection_approval") return "خدمة العملاء";
   return "النظام";
 };
 

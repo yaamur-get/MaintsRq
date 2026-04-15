@@ -200,6 +200,7 @@ export default function RequestsList() {
                     <SelectContent>
                       <SelectItem value="all">جميع الحالات</SelectItem>
                       <SelectItem value="pending_review">بانتظار المراجعة</SelectItem>
+                      <SelectItem value="pending_rejection_approval">بانتظار تأكيد الرفض</SelectItem>
                       <SelectItem value="in_progress">قيد التنفيذ</SelectItem>
                       <SelectItem value="closed">مغلق</SelectItem>
                     </SelectContent>
@@ -265,7 +266,7 @@ export default function RequestsList() {
                             </TableCell>
                             <TableCell>{request.request_type?.name}</TableCell>
                             <TableCell>
-                              {request.created_at && new Date(request.created_at).toLocaleDateString('ar-SA')}
+                              {request.created_at && new Date(request.created_at).toLocaleDateString('ar-SA-u-ca-gregory')}
                             </TableCell>
                             <TableCell>
                               <Badge className={`${statusInfo.color} border-0 hover:bg-opacity-80`}>

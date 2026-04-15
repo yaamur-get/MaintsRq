@@ -12,20 +12,23 @@ type Request = Database["public"]["Tables"]["requests"]["Row"];
 type RequestInsert = Database["public"]["Tables"]["requests"]["Insert"];
 type RequestUpdate = Database["public"]["Tables"]["requests"]["Update"];
 
-export type RequesterRole = "imam" | "muezzin" | "mosque_congregation";
+export type RequesterRole = "imam" | "muezzin" | "mosque_congregation" | "supervisor" | "mosque_management";
 
 export const REQUESTER_ROLE_LABELS: Record<RequesterRole, string> = {
   imam: "إمام",
   muezzin: "مؤذن",
   mosque_congregation: "جماعة المسجد",
+  supervisor: "مراقب",
+  mosque_management: "إدارة المساجد",
 };
 
 const isRequesterRole = (value: string): value is RequesterRole => {
-  return value === "imam" || value === "muezzin" || value === "mosque_congregation";
+  return value === "imam" || value === "muezzin" || value === "mosque_congregation" || value === "supervisor" || value === "mosque_management";
 };
 
 const PROJECT_MANAGER_ACTIONABLE_STATUSES: Database["public"]["Enums"]["request_status"][] = [
   "accepted_initial",
+  "pending_rejection_approval",
   "pending_inspection_approval",
   "pending_pricing_approval",
   "beneficiary_approved_pricing",
@@ -411,6 +414,49 @@ export const requestService = {
     }
 
     return data;
+  },
+
+  // خدمة العملاء: إرسال الرفض لاعتماد مدير المشاريع مع سبب الرفض
+  async submitRejectionForApproval(requestId: string, rejectionReason: string) {
+    const reason = rejectionReason.trim();
+    if (!reason) {
+      throw new Error("يرجى كتابة سبب الرفض");
+    }
+
+    const request = await this.updateRequestStatus(
+      requestId,
+      "pending_rejection_approval",
+      `سبب الرفض من خدمة العملاء: ${reason}`
+    );
+
+    const req = request as any;
+    await notificationService.notifyRole(
+      "project_manager",
+      "طلب مرفوض بانتظار تأكيد مدير المشاريع",
+      `تم رفض الطلب رقم ${req?.rq_number || requestId} من خدمة العملاء. السبب: ${reason}`,
+      requestId
+    );
+
+    return request;
+  },
+
+  // مدير المشاريع: تأكيد الرفض النهائي
+  async confirmRejectedByProjectManager(requestId: string) {
+    const request = await this.updateRequestStatus(
+      requestId,
+      "rejected",
+      "تم تأكيد الرفض النهائي من مدير المشاريع"
+    );
+
+    const req = request as any;
+    await notificationService.notifyRole(
+      "customer_service",
+      "تم تأكيد رفض الطلب",
+      `تم تأكيد رفض الطلب رقم ${req?.rq_number || requestId} من مدير المشاريع`,
+      requestId
+    );
+
+    return request;
   },
 
   // تحديث بيانات مقدم الطلب

@@ -1132,6 +1132,7 @@ export const Constants = {
         request_status: [
           "pending_review",
           "accepted_initial",
+          "pending_rejection_approval",
           "rejected",
           "approved",
           "pending_inspection",

@@ -286,7 +286,7 @@ export default function InspectionPage() {
                   <div>
                     <p className="text-sm text-gray-600">تاريخ الطلب</p>
                     <p className="font-semibold text-gray-900">
-                      {new Date(request.created_at).toLocaleDateString("ar-SA")}
+                      {new Date(request.created_at).toLocaleDateString("ar-SA-u-ca-gregory")}
                     </p>
                   </div>
                 </div>

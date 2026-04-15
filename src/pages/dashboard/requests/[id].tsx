@@ -251,7 +251,7 @@ function MosquePreviousRequests({ mosqueId, currentRequestId }: { mosqueId: stri
                 </Badge>
               </div>
               <p className="text-xs text-slate-600">
-                {new Date(req.created_at).toLocaleDateString("ar-SA")}
+                {new Date(req.created_at).toLocaleDateString("ar-SA-u-ca-gregory")}
               </p>
             </div>
           </Link>
@@ -264,6 +264,7 @@ function MosquePreviousRequests({ mosqueId, currentRequestId }: { mosqueId: stri
 const statusColors: Record<string, string> = {
   pending_review: "bg-orange-100 text-orange-800 border-orange-200",
   accepted_initial: "bg-charity-bg-calm text-charity-dark border-charity-medium",
+  pending_rejection_approval: "bg-rose-100 text-rose-800 border-rose-200",
   rejected: "bg-red-100 text-red-800 border-red-200",
   approved: "bg-charity-bg-calm text-charity-dark border-charity-medium",
   pending_inspection: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -285,7 +286,7 @@ const statusColors: Record<string, string> = {
 const getTimelineActorLabel = (entry: any) => {
   const fullName = entry?.changed_by_user?.full_name?.trim();
   if (fullName) return fullName;
-  if (entry?.new_status === "pending_review") return "خدمة العملاء";
+  if (entry?.new_status === "pending_review" || entry?.new_status === "pending_rejection_approval") return "خدمة العملاء";
   return "النظام";
 };
 
@@ -305,6 +306,9 @@ export default function RequestDetails() {
   const [expertPricing, setExpertPricing] = useState<any[]>([]);
   const [contractorBids, setContractorBids] = useState<any[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [submittingRejectionForApproval, setSubmittingRejectionForApproval] = useState(false);
+  const [confirmingFinalRejection, setConfirmingFinalRejection] = useState(false);
   const [externalReport, setExternalReport] = useState<ExternalInspectionResponse | null>(null);
   const [loadingExternalReport, setLoadingExternalReport] = useState(false);
   
@@ -663,6 +667,39 @@ export default function RequestDetails() {
       await loadRequest(id as string);
     } catch (error) {
       console.error("Error updating status:", error);
+    }
+  };
+
+  const handleSubmitRejectionForApproval = async () => {
+    const reason = rejectionReason.trim();
+    if (!reason) {
+      alert("يرجى كتابة سبب الرفض قبل الإرسال");
+      return;
+    }
+
+    try {
+      setSubmittingRejectionForApproval(true);
+      await requestService.submitRejectionForApproval(id as string, reason);
+      setRejectionReason("");
+      await loadRequest(id as string);
+    } catch (error: any) {
+      console.error("Error submitting rejection for approval:", error);
+      alert(error?.message || "تعذر إرسال الرفض لاعتماد مدير المشاريع");
+    } finally {
+      setSubmittingRejectionForApproval(false);
+    }
+  };
+
+  const handleConfirmFinalRejection = async () => {
+    try {
+      setConfirmingFinalRejection(true);
+      await requestService.confirmRejectedByProjectManager(id as string);
+      await loadRequest(id as string);
+    } catch (error: any) {
+      console.error("Error confirming final rejection:", error);
+      alert(error?.message || "تعذر تأكيد الرفض النهائي");
+    } finally {
+      setConfirmingFinalRejection(false);
     }
   };
 
@@ -1087,6 +1124,10 @@ export default function RequestDetails() {
   const requesterRoleOptions = Object.entries(REQUESTER_ROLE_LABELS).filter(
     ([value]) => value !== "mosque_congregation"
   );
+  const latestRejectionApprovalEntry = [...timeline]
+    .reverse()
+    .find((entry) => entry.new_status === "pending_rejection_approval");
+  const latestRejectionReason = latestRejectionApprovalEntry?.notes?.replace("سبب الرفض من خدمة العملاء:", "").trim() || "-";
 
   return (
     <>
@@ -1235,7 +1276,7 @@ export default function RequestDetails() {
                             <div>
                               <p className="text-xs text-slate-500">تاريخ التقديم</p>
                               <p className="text-sm font-medium text-slate-900">
-                                {new Date(request.created_at).toLocaleDateString("ar-SA", {
+                                {new Date(request.created_at).toLocaleDateString("ar-SA-u-ca-gregory", {
                                   year: "numeric",
                                   month: "long",
                                   day: "numeric"
@@ -1815,7 +1856,7 @@ export default function RequestDetails() {
                                     {statusTranslations[entry.new_status]?.label || entry.new_status}
                                   </p>
                                   <p className="text-sm text-slate-500">
-                                    {new Date(entry.created_at).toLocaleDateString("ar-SA")}
+                                    {new Date(entry.created_at).toLocaleDateString("ar-SA-u-ca-gregory")}
                                   </p>
                                 </div>
                                 <p className="text-sm text-slate-600">
@@ -1857,7 +1898,7 @@ export default function RequestDetails() {
                               <div>
                                 <CardTitle>تقرير المعاينة</CardTitle>
                                 <p className="text-sm text-slate-500 mt-0.5">
-                                  {new Date(externalReport.report.report_date).toLocaleDateString("ar-SA", {
+                                  {new Date(externalReport.report.report_date).toLocaleDateString("ar-SA-u-ca-gregory", {
                                     year: "numeric",
                                     month: "long",
                                     day: "numeric",
@@ -2439,15 +2480,29 @@ export default function RequestDetails() {
                         <CheckCircle2 className="w-4 h-4 ml-2" />
                         قبول أولي
                       </Button>
-                      <Button 
-                        variant="destructive" 
-                        className="w-full"
-                        disabled={isEditingRequest}
-                        onClick={() => handleStatusUpdate("rejected", "تم الرفض")}
-                      >
-                        <XCircle className="w-4 h-4 ml-2" />
-                        رفض الطلب
-                      </Button>
+
+                      <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                        <Label htmlFor="rejectionReason" className="text-sm text-red-900">
+                          سبب الرفض (إلزامي)
+                        </Label>
+                        <Textarea
+                          id="rejectionReason"
+                          value={rejectionReason}
+                          onChange={(e) => setRejectionReason(e.target.value)}
+                          placeholder="اكتب سبب الرفض ليظهر لمدير المشاريع"
+                          className="bg-white"
+                          disabled={isEditingRequest || submittingRejectionForApproval}
+                        />
+                        <Button
+                          variant="destructive"
+                          className="w-full"
+                          disabled={isEditingRequest || submittingRejectionForApproval || !rejectionReason.trim()}
+                          onClick={handleSubmitRejectionForApproval}
+                        >
+                          <XCircle className="w-4 h-4 ml-2" />
+                          {submittingRejectionForApproval ? "جاري الإرسال..." : "إرسال الرفض لاعتماد مدير المشاريع"}
+                        </Button>
+                      </div>
                     </>
                   )}
 
@@ -2482,6 +2537,26 @@ export default function RequestDetails() {
                       <CheckCircle2 className="w-4 h-4 ml-2" />
                       اعتماد التسعير وإرسال للمستفيد
                     </Button>
+                  )}
+
+                  {userRole === "project_manager" && request.current_status === "pending_rejection_approval" && (
+                    <div className="space-y-2">
+                      <Alert className="bg-red-50 border-red-200">
+                        <AlertCircle className="h-4 w-4 text-red-700" />
+                        <AlertDescription className="text-red-900 text-sm">
+                          سبب الرفض من خدمة العملاء: {latestRejectionReason}
+                        </AlertDescription>
+                      </Alert>
+                      <Button
+                        variant="destructive"
+                        className="w-full"
+                        disabled={confirmingFinalRejection}
+                        onClick={handleConfirmFinalRejection}
+                      >
+                        <XCircle className="w-4 h-4 ml-2" />
+                        {confirmingFinalRejection ? "جاري التأكيد..." : "تأكيد الرفض النهائي"}
+                      </Button>
+                    </div>
                   )}
 
                   {/* Technician Actions */}
@@ -2812,7 +2887,7 @@ export default function RequestDetails() {
                 </Card>
               )}
 
-              {request && (
+              {request && request.funding_type && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2">
