@@ -11,8 +11,9 @@ const supabase = supabaseClient as any;
 type Request = Database["public"]["Tables"]["requests"]["Row"];
 type RequestInsert = Database["public"]["Tables"]["requests"]["Insert"];
 type RequestUpdate = Database["public"]["Tables"]["requests"]["Update"];
+type DbRequesterRole = NonNullable<RequestInsert["requester_role"]>;
 
-export type RequesterRole = "imam" | "muezzin" | "mosque_congregation" | "supervisor" | "mosque_management";
+export type RequesterRole = DbRequesterRole | "supervisor" | "mosque_management";
 
 export const REQUESTER_ROLE_LABELS: Record<RequesterRole, string> = {
   imam: "إمام",
@@ -24,6 +25,13 @@ export const REQUESTER_ROLE_LABELS: Record<RequesterRole, string> = {
 
 const isRequesterRole = (value: string): value is RequesterRole => {
   return value === "imam" || value === "muezzin" || value === "mosque_congregation" || value === "supervisor" || value === "mosque_management";
+};
+
+const toDbRequesterRole = (role: RequesterRole): DbRequesterRole => {
+  if (role === "supervisor" || role === "mosque_management") {
+    return "mosque_congregation";
+  }
+  return role;
 };
 
 const PROJECT_MANAGER_ACTIONABLE_STATUSES: Database["public"]["Enums"]["request_status"][] = [
@@ -174,7 +182,7 @@ export const requestService = {
       const insertData: RequestInsert = {
         beneficiary_name: data.requester_name,
         beneficiary_phone: data.requester_phone,
-        requester_role: data.requester_role,
+        requester_role: toDbRequesterRole(data.requester_role),
         mosque_id: mosqueId,
         request_type_id: requestTypeId,
         description: data.details,
@@ -330,7 +338,7 @@ export const requestService = {
       .update({
         beneficiary_name: payload.requester_name,
         beneficiary_phone: payload.requester_phone,
-        requester_role: payload.requester_role,
+        requester_role: toDbRequesterRole(payload.requester_role),
         request_type_id: payload.request_type_id,
         mosque_id: payload.mosque_id,
         description: payload.description,
@@ -473,7 +481,7 @@ export const requestService = {
       .update({
         beneficiary_name: payload.requester_name,
         beneficiary_phone: payload.requester_phone,
-        requester_role: payload.requester_role,
+        requester_role: toDbRequesterRole(payload.requester_role),
         updated_at: new Date().toISOString(),
       } as RequestUpdate)
       .eq("id", requestId)

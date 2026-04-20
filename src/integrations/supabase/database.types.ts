@@ -937,6 +937,7 @@ export type Database = {
       request_status:
         | "pending_review"
         | "accepted_initial"
+        | "pending_rejection_approval"
         | "rejected"
         | "approved"
         | "pending_inspection"
@@ -947,33 +948,14 @@ export type Database = {
         | "beneficiary_approved_pricing"
         | "pending_funding"
         | "pending_contractor_bids"
+        | "pending_contractor_selection"
         | "pending_final_approval"
         | "in_progress"
         | "pending_final_report"
         | "pending_closure"
         | "closed"
         | "cancelled"
-        request_status:
-          | "pending_review"
-          | "accepted_initial"
-          | "rejected"
-          | "approved"
-          | "pending_inspection"
-          | "pending_inspection_approval"
-          | "pending_expert_pricing"
-          | "pending_pricing_approval"
-          | "pending_beneficiary_approval"
-          | "beneficiary_approved_pricing"
-          | "pending_funding"
-          | "pending_contractor_bids"
-          | "pending_contractor_selection"
-          | "pending_final_approval"
-          | "in_progress"
-          | "pending_final_report"
-          | "pending_closure"
-          | "closed"
-          | "cancelled"
-        user_role:
+      user_role:
         | "beneficiary"
         | "customer_service"
         | "project_manager"
@@ -1112,6 +1094,7 @@ export const Constants = {
       request_status: [
         "pending_review",
         "accepted_initial",
+        "pending_rejection_approval",
         "rejected",
         "approved",
         "pending_inspection",
@@ -1122,6 +1105,7 @@ export const Constants = {
         "beneficiary_approved_pricing",
         "pending_funding",
         "pending_contractor_bids",
+        "pending_contractor_selection",
         "pending_final_approval",
         "in_progress",
         "pending_final_report",
@@ -1129,29 +1113,7 @@ export const Constants = {
         "closed",
         "cancelled",
       ],
-        request_status: [
-          "pending_review",
-          "accepted_initial",
-          "pending_rejection_approval",
-          "rejected",
-          "approved",
-          "pending_inspection",
-          "pending_inspection_approval",
-          "pending_expert_pricing",
-          "pending_pricing_approval",
-          "pending_beneficiary_approval",
-          "beneficiary_approved_pricing",
-          "pending_funding",
-          "pending_contractor_bids",
-          "pending_contractor_selection",
-          "pending_final_approval",
-          "in_progress",
-          "pending_final_report",
-          "pending_closure",
-          "closed",
-          "cancelled",
-        ],
-        user_role:
+      user_role: [
         "beneficiary",
         "customer_service",
         "project_manager",
