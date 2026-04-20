@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AlertCircle, CheckCircle2, Loader2, MapPin } from "lucide-react";
 import {
   requestService,
@@ -453,32 +454,17 @@ export default function Home() {
                   >
                     الحي <span className="text-red-500">*</span>
                   </Label>
-                  <Select
-                    dir="rtl"
+                  <SearchableSelect
+                    items={districts.map((d) => ({ id: d.name, name: d.name }))}
                     value={formData.district}
                     onValueChange={(value) =>
                       setFormData({ ...formData, district: value })
                     }
                     disabled={!formData.city}
-                    required
-                  >
-                    <SelectTrigger className="text-base py-6 text-right">
-                      <SelectValue
-                        placeholder={formData.city ? "اختر الحي" : "اختر المدينة أولاً"}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {districts.map((district) => (
-                        <SelectItem
-                          key={district.id}
-                          value={district.name}
-                          className="text-right"
-                        >
-                          {district.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={formData.city ? "اختر الحي" : "اختر المدينة أولاً"}
+                    searchPlaceholder="ابحث عن الحي..."
+                    emptyMessage="لا توجد أحياء"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -488,34 +474,19 @@ export default function Home() {
                   >
                     المسجد <span className="text-red-500">*</span>
                   </Label>
-                  <Select
-                    dir="rtl"
+                  <SearchableSelect
+                    items={filteredMosques.map((m) => ({ id: m.id, name: m.name }))}
                     value={formData.mosque_id}
                     onValueChange={(value) =>
                       setFormData({ ...formData, mosque_id: value })
                     }
                     disabled={!formData.district}
-                    required
-                  >
-                    <SelectTrigger className="text-base py-6 text-right">
-                      <SelectValue
-                        placeholder={
-                          formData.district ? "اختر المسجد" : "اختر الحي أولاً"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredMosques.map((mosque) => (
-                        <SelectItem
-                          key={mosque.id}
-                          value={mosque.id}
-                          className="text-right"
-                        >
-                          {mosque.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={
+                      formData.district ? "اختر المسجد" : "اختر الحي أولاً"
+                    }
+                    searchPlaceholder="ابحث عن المسجد..."
+                    emptyMessage="لا توجد مساجد"
+                  />
 
                   <Dialog open={showAddMosqueDialog} onOpenChange={setShowAddMosqueDialog}>
                     <DialogTrigger asChild>

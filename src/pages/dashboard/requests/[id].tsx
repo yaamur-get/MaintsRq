@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1366,38 +1367,28 @@ export default function RequestDetails() {
 
                         <div className="space-y-2">
                           <Label>الحي</Label>
-                          <Select
+                          <SearchableSelect
+                            items={districts.map((d) => ({ id: d.id, name: d.name }))}
                             value={editForm.district_id}
                             onValueChange={(value) => setEditForm((prev) => ({ ...prev, district_id: value, mosque_id: "" }))}
                             disabled={!editForm.city_id}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={editForm.city_id ? "اختر الحي" : "اختر المدينة أولاً"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {districts.map((district) => (
-                                <SelectItem key={district.id} value={district.id}>{district.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder={editForm.city_id ? "اختر الحي" : "اختر المدينة أولاً"}
+                            searchPlaceholder="ابحث عن الحي..."
+                            emptyMessage="لا توجد أحياء"
+                          />
                         </div>
 
                         <div className="space-y-2 md:col-span-2">
                           <Label>المسجد</Label>
-                          <Select
+                          <SearchableSelect
+                            items={filteredMosques.map((m) => ({ id: m.id, name: m.name }))}
                             value={editForm.mosque_id}
                             onValueChange={(value) => setEditForm((prev) => ({ ...prev, mosque_id: value }))}
                             disabled={!editForm.district_id}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={editForm.district_id ? "اختر المسجد" : "اختر الحي أولاً"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {filteredMosques.map((mosque) => (
-                                <SelectItem key={mosque.id} value={mosque.id}>{mosque.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder={editForm.district_id ? "اختر المسجد" : "اختر الحي أولاً"}
+                            searchPlaceholder="ابحث عن المسجد..."
+                            emptyMessage="لا توجد مساجد"
+                          />
                         </div>
 
                         <div className="space-y-2 md:col-span-2">

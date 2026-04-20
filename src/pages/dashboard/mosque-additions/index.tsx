@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
   DialogContent,
@@ -423,26 +424,17 @@ export default function MosqueAdditions() {
 
                 <div className="space-y-2">
                   <Label>الحي *</Label>
-                  <Select
+                  <SearchableSelect
+                    items={filteredDistricts.map((d) => ({ id: d.id, name: d.name }))}
                     value={selectedDistrictId}
                     onValueChange={setSelectedDistrictId}
                     disabled={!selectedCityId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          selectedCityId ? "اختر الحي" : "اختر المدينة أولاً"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredDistricts.map((district) => (
-                        <SelectItem key={district.id} value={district.id}>
-                          {district.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder={
+                      selectedCityId ? "اختر الحي" : "اختر المدينة أولاً"
+                    }
+                    searchPlaceholder="ابحث عن الحي..."
+                    emptyMessage="لا توجد أحياء"
+                  />
                 </div>
               </div>
             )}
